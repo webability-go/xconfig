@@ -14,13 +14,18 @@ V0.0.1 - 2018-11-06
 - First commit, still not fully working
 
 
-Manuals
+Manual
 =======================
+
+XConfig loads a configuration file similar to a .ini file, but with some important improvements.
+
+Basic use:
+----------
 
 The configuration file have the following syntax for example:
 
 ```
-# this file is named myconfig.conf, used in following examples
+# this file is named example.conf, used in following examples
 # the # denotes a comment.
 ; is also a comment
 parameter1=value1
@@ -28,55 +33,65 @@ parameter2=value2
 parameter2=value3
 ```
 
-As version 1.1, xconfig now accept true, on, yes as a boolean 'true' and false, off, no, none as a boolean 'false'.
-For instance, that means parameter=off is now a boolean false, and parameter=yes is now a boolean true.
+XConfig accept "true", "on", "yes" as a boolean 'true' and "false", "off", "no", "none" as a boolean 'false'.
+For instance, that means parameter=off is a boolean false, and parameter=yes is a boolean true in the XConfig structure.
 
-Before verion 1.0, note the config file is always read as a STRING.
-That means parameter=0, parameter=false, parameter=123
-will be caught as "0", "false", "123", not integers or booleans
+XConfig also convert all integers to an int parameter in the XConfig structure
 
-This will be converted into the XConfig object.
 The XConfig object is easily usable as:
 ```
-$config = new XConfig('String of the config file');
+config := &xconfig.XConfig{}
+confif.Load("./example.conf")
+confif.Merge("./mergeme.conf")
 ```
-or
+
+or, if you load your own file by other means (remote, database etc)
 ```
-$config = new XConfig(Array of parameters);
+config := &xconfig.XConfig{}
+mydata := getMyParameters()   // get the whole configuration file into mydata
+confif.LoadString(mydata)
 ```
-Concrete Example 1:
+
+or, if you already have your configuration into a Map of Strings (unserialized, etc)
 ```
-include_once 'include/xconfig/XConfig.class.php');
-$config = new XConfig(file_get_contents('myconfig.conf'));
+config := &xconfig.XConfig{}
+mydata := map[string]string{"param1":"value1","param2":"value2"}
+confif.LoadXConfig(mydata)
 ```
-Concrete Example 2:
-```
-include_once 'include/xconfig/XConfig.class.php');
-$config = new XConfig(array(
-    'parameter1' => 'value1',
-    'parameter2' => array('value2', 'value3')
-  ));
-```
+
+There are 3 sets of public functions:
+Load*: to load a file, a string dataset, or another XConfig dataset. Loading means all already existing parameters will be replaced by the new configuration.
+  This is usefull when you have a main config file, and a local config file that must replace some values
+Merge*: to merge a file, a string dataset, or another XConfig dataset. Merging means all new entries will be added to the already existing parameters.
+  This is userfull then you split your config file into subset of parameters each (for instance database config, memory config, internationalization config, etc)
+Get/Set/Add: to read, set (replace) or add (merge) parameters to the XConfig.
+
 Once you have an instance of your configuration, you may use it like this:
+
 ```
 // assign a local variable
-$param1 = $config->parameter1;
-echo $param1 . '<br />';
+param1 := config.Get("parameter1")
+fmt.Println(param1)
 
-// use directly the variable
-foreach($config->parameter2 as $p)
-  echo $p . '<br />';
+// assign a casted local variable
+var param2 string
+param2 = config.Get("parameter2").(string)  // be carefull that the parameter IS actually the same cast or an error is thrown
+fmt.Println(param2)
+
+// use directly the parameters
+for p, v := range config {
+  fmt.Printf("%s=%v\n", p, v)
 
 // set a new parameter
-$config->parameter3 = 'value3';
+config.Set("parameter3", "value3")
+config.Set("parameter3", "new value3") // will be replaced
+config.Add("parameter3", "another value3") // will be replaced by an array of values with both entries into it
+config.Set("parameter4", 12345)
+config.Set("parameter5", true)
+```
 
-// iterate the config
-foreach($config as $parameter => $value)
-  echo $parameter . ' = ' . $value . '<br />';
-```  
-
-Advanced topic
---------------
+Advanced topics:
+----------------
 
 Default values:
 ---------------
@@ -87,8 +102,6 @@ Note: default values will be taken only if the parameter DOES NOT EXIST into the
 Something like this:
 parameter1=
 will not fire the default value because the parameter is present into the config file
-
-You may encapsulate the config object into a specific personal object with a local default set of parameters. 
 
 Example:
 --------
