@@ -21,6 +21,7 @@ Version Changes Control
 V0.0.2 - 2018-11-14
 -----------------------
 - Work for a full normal load of a file with repeated parameters (array of parameters)
+- VERSION constant added
 
 V0.0.1 - 2018-11-06
 -----------------------

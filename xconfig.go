@@ -10,6 +10,8 @@ import (
   "regexp"
 )
 
+const VERSION = "0.0.2"
+
 /* Basic parameter. 
    The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = bool, 4 = array of strings, 5 = array of int, 6 = XConfig
 */
