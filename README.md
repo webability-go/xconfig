@@ -2,7 +2,7 @@
 
 XConfig for GO v0.0.2
 =============================
-This is the build 2
+This is the build 0.0.2
 
 The XConfig library is used to easily build a config object based on a descriptor file.
 
