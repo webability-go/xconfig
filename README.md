@@ -1,8 +1,8 @@
 @UTF-8
 
-XConfig for GO v0.0.1
+XConfig for GO v0.0.2
 =============================
-This is the build 1
+This is the build 2
 
 The XConfig library is used to easily build a config object based on a descriptor file.
 
@@ -17,6 +17,10 @@ TO DO:
 
 Version Changes Control
 =======================
+
+V0.0.2 - 2018-11-14
+-----------------------
+- Work for a full normal load of a file with repeated parameters (array of parameters)
 
 V0.0.1 - 2018-11-06
 -----------------------
