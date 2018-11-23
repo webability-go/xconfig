@@ -13,25 +13,30 @@ TO DO:
 - implement + and :
 - implement Save
 - Add a flag when it's a multiple load to warn a "save"
+- Implement sub XConfig set ( parameter.parameter.parameter=xxx )
 
 
 Version Changes Control
 =======================
 
-V0.0.2 - 2018-11-14
+V0.0.2 - 2018-11-20
 -----------------------
-- Work for a full normal load of a file with repeated parameters (array of parameters)
+- Added support for strings starting with "
+- Added support for array of booleans
+- Added support for float parameters
+- Work for a full normal load of a file, suporting also repeated parameters (array of parameters)
 - VERSION constant added
+- XConfig.Get function implemented for basic parameters (without + or :)
 
-V0.0.1 - 2018-11-06
+V0.0.1 - 2018-11-14
 -----------------------
 - First commit, only work to load basic parameters
 
 
 
 
-Manual
-=======================
+Manual:
+=======
 
 XConfig loads a configuration file similar to a .ini file, but with some important improvements:
 - You can load more than one file in merge mode or replacing mode in the same config object.
@@ -95,14 +100,24 @@ The point (.) denotes a sub set of parameters (a new sub XConfig dataset for thi
 
 3.3 Parameter values:
 
+There are 4 types of values:
+- Strings
+- Integer
+- Float
+- Boolean
+
 The value has no restrictions except it must enter into the line (no line breaks allowed)
 The compiler accepts strings "true", "on", "yes" as a boolean 'true' and "false", "off", "no", "none" as a boolean 'false'.
 For instance, that means parameter=off is a boolean false, and parameter=yes is a boolean true in the XConfig structure.
-The compiler also convert all integers to an int parameter in the XConfig structure
+
+The compiler also convert all integers to an int parameter in the XConfig structure, and float values as float64 type.
+If you want a natural integer, float or boolean interpreted as a string, you must start it with a " character:
+param1="123   will be the string **123** in the XConfig structure
+
+If you want a string starting with a ", you will need to put 2 " at the begining:
+param=""abc   will be the string **"abc** in the XConfig structure
 
 When you insert more than one value for a parameter, it creates an array of the type of the first found value. If you have a mixed type of values, you will get an error
-- The boolean parameters cannot be turned into an array, they are always implicitely replaced
-
 
 for instance:
 ```
@@ -110,19 +125,48 @@ parameter1=true
 parameter1=123
 parameter1=hello
 ```
-"123" and "hello" are not boolean so you get a compilation error.
+"123" and "hello" are not boolean so you get an error reading your definition file.
 
-Note that is the first parameter is a string, all new values will be considered as a string also:
+Note that is the first parameter is a string, all new values will should start with " to be considered as a string also:
 ```
 parameter1=hello
-parameter1=true
-parameter1=123
+parameter1="true
+parameter1="123
 ```
 you will obtain an array []string with values ["hello", "true", "123"]
 
 The order IS important.
 
-4. Invoking the configuration in code:
+4. Invoking the XConfig in your code:
+
+First of all, you need to import the library in your code:
+
+```
+import (
+  "github.com/webagility-go/xconfig"
+)
+```
+
+Then you need first to create a blank XConfig instance:
+
+```
+xc := xonfig.New()
+```
+
+Then, you generally load a file to fill in your XConfig definition
+
+```
+xc.LoadFile("/path/to/my/file.conf")
+```
+
+And finally use the configuration
+
+```
+myparam := xc.Get("myparam")
+```
+
+myparam will take the type of the parameter: string, integer, float64, bool, or an array of string, integer or float64
+(you should be aware of the type of your parameter before using it)
 
 
 5. Merging vs Loading
@@ -136,6 +180,25 @@ Advanced use:
 Package reference:
 ------------------
 
+1. New, Declaration
+
+2. Set
+
+3. Add
+
+4. Get
+
+5. LoadFile
+
+6. MergeFile
+
+7. LoadString
+
+8. MergeString
+
+9. LoadXConfig
+
+10. MergeXConfig
 
 
 Internals:
@@ -207,7 +270,7 @@ config.Set("parameter5", true)
 ```
 
 Advanced topics:
-----------------
+================
 
 1. Default values:
 ------------------
@@ -269,6 +332,8 @@ title=Welcome
 
 Sub dataset:
 ------------
+
+
 
 
 

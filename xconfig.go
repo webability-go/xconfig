@@ -13,7 +13,7 @@ import (
 const VERSION = "0.0.2"
 
 /* Basic parameter. 
-   The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = bool, 4 = array of strings, 5 = array of int, 6 = XConfig
+   The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = float, 4 = bool, 11 = array of strings, 12 = array of int, 13 = array of float, 14 = array of bool, 21 = XConfig
 */
 type Parameter struct
 {
@@ -32,59 +32,97 @@ func (p *Parameter) set(paramtype int, value interface{}) {
 
 func (p *Parameter) add(paramtype int, value interface{}) error {
   switch p.paramtype {
-    case 0: 
+    case 0:   // not set yet
       p.paramtype = paramtype
       p.Value = value
-    case 1:
+    case 1:   // string
       if paramtype == 1 {
         // transform the parameter into an array and change paramtype
         sub := make([]string, 0, 2)
         p.Value = append(sub, p.Value.(string), value.(string))
-        p.paramtype = 4
-      } else if paramtype == 4 {
+        p.paramtype = 11
+      } else if paramtype == 11 {
         // concatenate array of string
         p.Value = append(value.([]string), p.Value.(string))
       } else {
         return errors.New("The parameter cannot add an incompatible value to a string")
       }
-    case 2:
+    case 2:   // integer
       if paramtype == 2 {
         // transform the parameter into an array and change paramtype
         sub := make([]int, 0, 2)
         p.Value = append(sub, p.Value.(int), value.(int))
-        p.paramtype = 5
-      } else if paramtype == 5 {
+        p.paramtype = 12
+      } else if paramtype == 12 {
         // concatenate array of int
         p.Value = append(value.([]int), p.Value.(int))
       } else {
         return errors.New("The parameter cannot add an incompatible value to an integer")
       }
-    case 3:
+    case 3:   // float64
       if paramtype == 3 {
-        p.Value = value
+        // transform the parameter into an array and change paramtype
+        sub := make([]float64, 0, 2)
+        p.Value = append(sub, p.Value.(float64), value.(float64))
+        p.paramtype = 13
+      } else if paramtype == 13 {
+        // concatenate array of float64
+        p.Value = append(value.([]float64), p.Value.(float64))
+      } else {
+        return errors.New("The parameter cannot add an incompatible value to a float")
+      }
+    case 4:   // boolean
+      if paramtype == 4 {
+        // transform the parameter into an array and change paramtype
+        sub := make([]bool, 0, 2)
+        p.Value = append(sub, p.Value.(bool), value.(bool))
+        p.paramtype = 14
+      } else if paramtype == 14 {
+        // concatenate array of bool
+        p.Value = append(value.([]bool), p.Value.(bool))
       } else {
         return errors.New("The parameter cannot add an incompatible value to a boolean")
       }
-    case 4:
+    case 11:   // array of string
       if paramtype == 1 {
         p.Value = append(p.Value.([]string), value.(string))
-      } else if paramtype == 4 {
+      } else if paramtype == 11 {
         // concatenate array of string
         p.Value = append(p.Value.([]string), value.([]string)...)
       } else {
         return errors.New("The parameter cannot add an incompatible value to an array of strings")
       }
-    case 5:
+    case 12:   // array of int
       if paramtype == 2 {
         p.Value = append(p.Value.([]int), value.(int))
-      } else if paramtype == 5 {
+      } else if paramtype == 12 {
         // concatenate array of int
         p.Value = append(p.Value.([]int), value.([]int)...)
       } else {
         return errors.New("The parameter cannot add an incompatible value to an array of integers")
       }
+    case 13:   // array of float64
+      if paramtype == 3 {
+        p.Value = append(p.Value.([]float64), value.(float64))
+      } else if paramtype == 13 {
+        // concatenate array of float64
+        p.Value = append(p.Value.([]float64), value.([]float64)...)
+      } else {
+        return errors.New("The parameter cannot add an incompatible value to an array of integers")
+      }
+    case 14:   // array of float64
+      if paramtype == 4 {
+        p.Value = append(p.Value.([]bool), value.(bool))
+      } else if paramtype == 14 {
+        // concatenate array of bool
+        p.Value = append(p.Value.([]bool), value.([]bool)...)
+      } else {
+        return errors.New("The parameter cannot add an incompatible value to an array of booleans")
+      }
+    case 21:   // XConfig
+      // pass the addparam to the subset XConfig
     default:
-      return errors.New("The parameter cannot add an incompatible value to a sub XConfig")
+      return errors.New("Unknow parameter type")
   }
   return nil
 }
@@ -135,7 +173,7 @@ func (c *XConfig) addparam(line int, key string, typeparam int, value interface{
 }
 
 
-func (c *XConfig) setparam(line int, key string, typeparam int, value interface{}) {
+func (c *XConfig) setparam(line int, key string, typeparam int, value interface{}) error {
   // check if key contains "+" (forced array) and . (subset of config)
   // and creates a Map[] if the value already exists (or just set it)
   //  keydata, merge := analyzeKey(key)
@@ -144,6 +182,7 @@ func (c *XConfig) setparam(line int, key string, typeparam int, value interface{
   p.add(typeparam, value)
   (*c).Parameters[key] = *p
   c.Order = append(c.Order, key)
+  return nil
 }
 
 func (c *XConfig) parseline(line int, data string, merge bool) error {
@@ -165,19 +204,26 @@ func (c *XConfig) parseline(line int, data string, merge bool) error {
   if len(data) > posequal {
     strvalue := strings.TrimSpace(data[posequal+1:])
     value = strvalue
-    
-    if strvalue == "yes" || strvalue == "true" || strvalue == "on" {
-      value = true
-      typeparam = 3
-    }
-    if strvalue == "no" || strvalue == "none" || strvalue == "false" || strvalue == "off" {
-      value = false
-      typeparam = 3
-    }
-    
-    if intvalue, err := strconv.Atoi(strvalue); err == nil {
-      value = intvalue
-      typeparam = 2
+    if len(strvalue) > 0 && strvalue[0] == '"' {
+      value = strvalue[1:]
+    } else {
+      if strvalue == "yes" || strvalue == "true" || strvalue == "on" {
+        value = true
+        typeparam = 4
+      } else if strvalue == "no" || strvalue == "none" || strvalue == "false" || strvalue == "off" {
+        value = false
+        typeparam = 4
+      } else {
+        if intvalue, err := strconv.Atoi(strvalue); err == nil {
+          value = intvalue
+          typeparam = 2
+        } else {
+          if floatvalue, err := strconv.ParseFloat(strvalue, 64); err == nil {
+            value = floatvalue
+            typeparam = 3
+          }
+        }
+      }
     }
   }
   return c.addparam(line, key, typeparam, value)
@@ -261,98 +307,40 @@ func (c *XConfig) parsestring(data string, merge bool) error {
   return nil
 }
 
-
-
-
-
-
-
-
-func analyzeKey(key string) (interface{}, bool) {
-  mustmerge := false
-  if key[len(key)-1] == '+' {
-    mustmerge = true
-    key = key[0:len(key)-1]
-  }
-  if key[len(key)-1] == '*' {
-    key = key[0:len(key)-1]
-  }
-
-  
-  match, _ := regexp.MatchString("[a-zA-Z0-9_-]+", key)
-  return match, mustmerge
-
-  
-}
-
 func (c *XConfig) Set(key string, value interface{}) error {
   // check if key contains "+" (forced array) and . (subset of config)
   // and just replace the value
-/*
-
-  mustmerge := false
-  if key[len(key)-1] == '+' {
-    mustmerge = true
-    key = key[0:len(key)-2]
+  var valuetype int
+  switch value.(type) {
+    case string: valuetype = 1
+    case int: valuetype = 2
+    case bool: valuetype = 3
   }
-  if key[len(key)-1] == '*' {
-    key = key[0:len(key)-2]
-  }
-
-  if mustmerge {
-    (*c)[key] = value
-  } else {
-    (*c)[key] = value
-  }
-  */
-  return nil
-}
-
-
-
-func (c *XConfig) Add(key string, value interface{}) error {
-  // check if key contains "+" (forced array) and . (subset of config)
-  // and creates a Map[] if the value already exists (or just set it)
-//  keydata, merge := analyzeKey(key)
-//  mustmerge := false
-
-  /*
-  if val, ok := (*c)[key]; ok {
-    switch reflect.TypeOf(val).Kind() {
-      case reflect.Slice:
-        (*c)[key] = append(val.([]string), value.(string))
-      default:
-        sub := make([]string, 0, 2)
-        sub = append(sub, val.(string), value.(string))
-        (*c)[key] = sub
-    }
-  } else {
-    fmt.Println("Assign " + key)
-    (*c)[key] = value
-    fmt.Println(*c)
-  }
-  */
-/*
-  if mustmerge {
-    (*c)[key] = value
-  } else {
-    (*c)[key] = value
-  }
-  (*c)[key] = value
-*/
-
-
-
-
-  return nil
+  return c.setparam(0, key, valuetype, value)
 }
 
 func (c *XConfig) Get(key string) interface{} {
-  // check if key contains "." (subset if config)
+  // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     return val.Value
   }
   return nil
+}
+
+// Accept only string, int, float64 and boolean values
+func (c *XConfig) Add(key string, value interface{}) error {
+  // check if key contains "+" (forced array) and . (subset of config)
+  // and creates a Map[] if the value already exists (or just set it)
+  var valuetype int
+  switch value.(type) {
+    case string: valuetype = 1
+    case int: valuetype = 2
+    case float64: valuetype = 3
+    case bool: valuetype = 4
+    default: 
+      return errors.New("The XConfig.Add function only accept string, integer, float64 and boolean values")
+  }
+  return c.addparam(0, key, valuetype, value)
 }
 
 func (c *XConfig) LoadFile(filename string) error {
@@ -378,3 +366,32 @@ func (c *XConfig) LoadXConfig(data *XConfig) error {
 func (c *XConfig) MergeXConfig(data *XConfig) error {
   return c.parsemap(data, true)
 }
+
+
+
+
+
+
+
+
+
+
+
+func analyzeKey(key string) (interface{}, bool) {
+  mustmerge := false
+  if key[len(key)-1] == '+' {
+    mustmerge = true
+    key = key[0:len(key)-1]
+  }
+  if key[len(key)-1] == '*' {
+    key = key[0:len(key)-1]
+  }
+
+  
+  match, _ := regexp.MatchString("[a-zA-Z0-9_-]+", key)
+  return match, mustmerge
+
+  
+}
+
+

@@ -25,10 +25,10 @@ func TestOneStringParam(t *testing.T) {
   }
 }
 
-func TestTwoStringParam(t *testing.T) {
+func TestStringParam(t *testing.T) {
   // Test 2: assign 3 different parameters string
   conf := xconfig.New()
-  conf.LoadString("param1=value1\nparam2=value2\nparam3=value3")
+  conf.LoadString("param1=value1\nparam2=value2\nparam3=value3\nparam4=\"123\nparam5=\"on")
 
   // print what we got
   fmt.Println(conf)
@@ -37,12 +37,17 @@ func TestTwoStringParam(t *testing.T) {
   if (*conf).Parameters["param1"].Value != "value1" || (*conf).Parameters["param2"].Value != "value2"  || (*conf).Parameters["param3"].Value != "value3" {
     t.Errorf("The parameters are not correctly set")
   }
+  if (*conf).Parameters["param4"].Value != "123" || (*conf).Parameters["param5"].Value != "on" {
+    t.Errorf("The parameters are not correctly set")
+  }
   
   // Get
   v1 := conf.Get("param1")
   v2 := conf.Get("param2")
   v3 := conf.Get("param3")
-  if v1 != "value1" || v2 != "value2" || v3 != "value3" {
+  v4 := conf.Get("param4")
+  v5 := conf.Get("param5")
+  if v1 != "value1" || v2 != "value2" || v3 != "value3" || v4 != "123" || v5 != "on" {
     t.Errorf("The parameters are not correctly passed")
   }
 }
@@ -62,19 +67,31 @@ func TestBoolParam(t *testing.T) {
 func TestIntegerParam(t *testing.T) {
   // Test 4: 
   conf := xconfig.New()
-  conf.LoadString("param1=0\nparam2=1\nparam3=1234567890")
+  conf.LoadString("param1=0\nparam2=-1\nparam3=1234567890")
 
   fmt.Println(conf)
 
-  if (*conf).Parameters["param1"].Value != 0 || (*conf).Parameters["param2"].Value != 1 || (*conf).Parameters["param3"].Value != 1234567890 {
+  if (*conf).Parameters["param1"].Value != 0 || (*conf).Parameters["param2"].Value != -1 || (*conf).Parameters["param3"].Value != 1234567890 {
     t.Errorf("The integer parameters are not correctly set")
+  }
+}
+
+func TestFloatParam(t *testing.T) {
+  // Test 4: 
+  conf := xconfig.New()
+  conf.LoadString("param1=0.123\nparam2=12e7\nparam3=-76364.2")
+
+  fmt.Println(conf)
+
+  if (*conf).Parameters["param1"].Value != 0.123 || (*conf).Parameters["param2"].Value != 12e7 || (*conf).Parameters["param3"].Value != -76364.2 {
+    t.Errorf("The float parameters are not correctly set")
   }
 }
 
 func TestArrayParam(t *testing.T) {
   // Test 5: 
   conf := xconfig.New()
-  conf.LoadString("param1=value1\nparam1=value2\nparam1=value3")
+  conf.LoadString("param1=value1\nparam1=value2\nparam1=value3\nparam2=123\nparam2=-1\nparam2=1234567890\nparam3=0.1\nparam3=-123.567\nparam3=12e7\nparam4=true\nparam4=off\nparam4=on")
 
   fmt.Println(conf)
   
