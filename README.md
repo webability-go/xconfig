@@ -19,7 +19,7 @@ TO DO:
 Version Changes Control
 =======================
 
-V0.0.2 - 2018-11-20
+V0.0.2 - 2018-??-??
 -----------------------
 - Added support for strings starting with "
 - Added support for array of booleans
