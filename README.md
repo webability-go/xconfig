@@ -19,7 +19,12 @@ TO DO:
 Version Changes Control
 =======================
 
-V0.0.2 - 2018-??-??
+V0.0.3 - 2018-??-??
+-----------------------
+> Branch "late-night" added to github
+
+
+V0.0.2 - 2018-11-27
 -----------------------
 - Added support for strings starting with "
 - Added support for array of booleans
