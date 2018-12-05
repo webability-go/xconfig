@@ -10,7 +10,7 @@ import (
   "regexp"
 )
 
-const VERSION = "0.0.2"
+const VERSION = "0.0.3"
 
 /* Basic parameter. 
    The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = float, 4 = bool, 11 = array of strings, 12 = array of int, 13 = array of float, 14 = array of bool, 21 = XConfig
@@ -157,17 +157,35 @@ func (c *XConfig) addparam(line int, key string, typeparam int, value interface{
   //  mustmerge := false
   var err error
   err = nil
-
-  if val, ok := (*c).Parameters[key]; ok {
-    p := newParam()
-    err = p.add(val.paramtype, val.Value)
-    err = p.add(typeparam, value)
-    (*c).Parameters[key] = *p
+  
+  pospoint := strings.Index(key, ".")
+  if pospoint >= 0 {
+    firstkey := strings.TrimSpace(key[:pospoint])
+    subkey := strings.TrimSpace(key[pospoint+1:])
+    
+    if val, ok := (*c).Parameters[firstkey]; ok {
+      // already exists: add the sub parameters, val is an *XConfig
+      val.Value.(*XConfig).addparam(line, subkey, typeparam, value)
+    } else {
+      // no existe
+      p := newParam()
+      err = p.add(21, New() )
+      p.Value.(*XConfig).addparam(line, subkey, typeparam, value)
+      (*c).Parameters[firstkey] = *p
+      c.Order = append(c.Order, firstkey)
+    }
   } else {
-    p := newParam()
-    err = p.add(typeparam, value)
-    (*c).Parameters[key] = *p
-    c.Order = append(c.Order, key)
+    if val, ok := (*c).Parameters[key]; ok {
+      p := newParam()
+      err = p.add(val.paramtype, val.Value)
+      err = p.add(typeparam, value)
+      (*c).Parameters[key] = *p
+    } else {
+      p := newParam()
+      err = p.add(typeparam, value)
+      (*c).Parameters[key] = *p
+      c.Order = append(c.Order, key)
+    }
   }
   return err
 }
