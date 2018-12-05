@@ -1,10 +1,10 @@
 @UTF-8
 
-XConfig for GO v0.0.2
+XConfig for GO v0
 =============================
-This is the build 2
 
 The XConfig library is used to easily build a config object based on a descriptor file.
+
 
 TO DO:
 ======
@@ -13,16 +13,15 @@ TO DO:
 - implement + and :
 - implement Save
 - Add a flag when it's a multiple load to warn a "save"
-- Implement sub XConfig set ( parameter.parameter.parameter=xxx )
 
 
 Version Changes Control
 =======================
 
-V0.0.3 - 2018-??-??
+V0.0.3 - 2018-12-05
 -----------------------
 > Branch "late-night" added to github
-
+- Added support for sub-XConfig with entry1.entry2.entry3=xxx
 
 V0.0.2 - 2018-11-27
 -----------------------
@@ -41,7 +40,7 @@ V0.0.1 - 2018-11-14
 
 
 Manual:
-=======
+=======================
 
 XConfig loads a configuration file similar to a .ini file, but with some important improvements:
 - You can load more than one file in merge mode or replacing mode in the same config object.
