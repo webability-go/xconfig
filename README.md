@@ -13,10 +13,16 @@ TO DO:
 - implement + and :
 - implement Save
 - Add a flag when it's a multiple load to warn a "save"
+- Add error control con Get* for type conversions (if the type is different as expected)
 
 
 Version Changes Control
 =======================
+
+V0.0.4 - 2018-12-21
+-----------------------
+- Added GetString, GetInt, GetBool and GetFloat to directly get the known value type (and do not have to convert types)
+- Error corrected on Set (type float added)
 
 V0.0.3 - 2018-12-05
 -----------------------
