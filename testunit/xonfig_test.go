@@ -20,7 +20,7 @@ func TestOneStringParam(t *testing.T) {
   }
   
   // Get
-  if v := conf.Get("param1"); v != "value1" {
+  if v, _ := conf.Get("param1"); v != "value1" {
     t.Errorf("The parameter param1 is not correctly passed")
   }
 }
@@ -42,11 +42,11 @@ func TestStringParam(t *testing.T) {
   }
   
   // Get
-  v1 := conf.Get("param1")
-  v2 := conf.Get("param2")
-  v3 := conf.Get("param3")
-  v4 := conf.Get("param4")
-  v5 := conf.Get("param5")
+  v1, _ := conf.Get("param1")
+  v2, _ := conf.Get("param2")
+  v3, _ := conf.Get("param3")
+  v4, _ := conf.Get("param4")
+  v5, _ := conf.Get("param5")
   if v1 != "value1" || v2 != "value2" || v3 != "value3" || v4 != "123" || v5 != "on" {
     t.Errorf("The parameters are not correctly passed")
   }

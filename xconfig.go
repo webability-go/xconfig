@@ -10,7 +10,7 @@ import (
   "regexp"
 )
 
-const VERSION = "0.0.3"
+const VERSION = "0.0.4"
 
 /* Basic parameter. 
    The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = float, 4 = bool, 11 = array of strings, 12 = array of int, 13 = array of float, 14 = array of bool, 21 = XConfig
@@ -332,17 +332,58 @@ func (c *XConfig) Set(key string, value interface{}) error {
   switch value.(type) {
     case string: valuetype = 1
     case int: valuetype = 2
-    case bool: valuetype = 3
+    case float64: valuetype = 3
+    case bool: valuetype = 4
   }
   return c.setparam(0, key, valuetype, value)
 }
 
-func (c *XConfig) Get(key string) interface{} {
+func (c *XConfig) Get(key string) (interface{}, bool) {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
-    return val.Value
+    return val.Value, true
   }
-  return nil
+  return nil, false
+}
+
+func (c *XConfig) GetString(key string) (string, bool) {
+  // check if key contains "." (subset of config)
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case string: return val.Value.(string), true
+    }
+  }
+  return "", false
+}
+
+func (c *XConfig) GetInt(key string) (int, bool) {
+  // check if key contains "." (subset of config)
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case int: return val.Value.(int), true
+    }
+  }
+  return 0, false
+}
+
+func (c *XConfig) GetFloat(key string) (float64, bool) {
+  // check if key contains "." (subset of config)
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case float64: return val.Value.(float64), true
+    }
+  }
+  return 0, false
+}
+
+func (c *XConfig) GetBool(key string) (bool, bool) {
+  // check if key contains "." (subset of config)
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case bool: return val.Value.(bool), true
+    }
+  }
+  return false, false
 }
 
 // Accept only string, int, float64 and boolean values
