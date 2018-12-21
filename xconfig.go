@@ -338,6 +338,10 @@ func (c *XConfig) Set(key string, value interface{}) error {
   return c.setparam(0, key, valuetype, value)
 }
 
+/*
+ If the existance of the key entry does matter, use Get. The second parameter is set to false when the entry does not existance
+ You will have to cast your result
+*/
 func (c *XConfig) Get(key string) (interface{}, bool) {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
@@ -346,44 +350,56 @@ func (c *XConfig) Get(key string) (interface{}, bool) {
   return nil, false
 }
 
-func (c *XConfig) GetString(key string) (string, bool) {
+/*
+ Get the string value of a string param. If the value is not string or does not exists, return ""
+*/
+func (c *XConfig) GetString(key string) string {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
-      case string: return val.Value.(string), true
+      case string: return val.Value.(string)
     }
   }
-  return "", false
+  return ""
 }
 
-func (c *XConfig) GetInt(key string) (int, bool) {
+/*
+ Get the integer value of an int param. If the value is not int or does not exists, return 0
+*/
+func (c *XConfig) GetInt(key string) int {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
-      case int: return val.Value.(int), true
+      case int: return val.Value.(int)
     }
   }
-  return 0, false
+  return 0
 }
 
-func (c *XConfig) GetFloat(key string) (float64, bool) {
+/*
+ Get the float value of a float param. If the value is not float or does not exists, return 0
+*/
+func (c *XConfig) GetFloat(key string) float64 {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
-      case float64: return val.Value.(float64), true
+      case float64: return val.Value.(float64)
     }
   }
-  return 0, false
+  return 0
 }
 
-func (c *XConfig) GetBool(key string) (bool, bool) {
+/*
+ Get the boolean value of a bool. If the value is not bool or does not exists, return false
+*/
+func (c *XConfig) GetBool(key string) bool {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
-      case bool: return val.Value.(bool), true
+      case bool: return val.Value.(bool)
     }
   }
-  return false, false
+  return false
 }
 
 // Accept only string, int, float64 and boolean values
