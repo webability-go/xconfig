@@ -8,9 +8,11 @@ import (
   "strings"
   "strconv"
   "regexp"
+  
+  "github.com/webability-go/xcore"
 )
 
-const VERSION = "0.0.4"
+const VERSION = "0.0.5"
 
 /* Basic parameter. 
    The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = float, 4 = bool, 11 = array of strings, 12 = array of int, 13 = array of float, 14 = array of bool, 21 = XConfig
@@ -127,6 +129,10 @@ func (p *Parameter) add(paramtype int, value interface{}) error {
   return nil
 }
 
+type XConfigDef interface {
+  xcore.XDatasetDef
+}
+
 type XConfig struct {
   Parameters map[string]Parameter
   Comments map[string]string
@@ -142,6 +148,10 @@ func New() *XConfig {
        }
   return c
 }
+
+/*
+  The private functions used to control the XConfig structre and load strings and files
+*/
 
 func (c *XConfig) addcomment (line int, comment string) error {
   id := "#" + strconv.Itoa(line)
@@ -325,7 +335,24 @@ func (c *XConfig) parsestring(data string, merge bool) error {
   return nil
 }
 
-func (c *XConfig) Set(key string, value interface{}) error {
+
+/*
+  XDataset interface:
+
+  // Get will return the value associated to the key if it exists, or bool = false
+  Get(key string) (interface{}, bool)
+  // Same as Get but will return the value associated to the key as a XDatasetDef if it exists, or bool = false
+  GetDataset(key string) (XDatasetDef, bool)
+  // Same as Get but will return the value associated to the key as a XDatasetCollectionDef if it exists, or bool = false
+  GetCollection(key string) (XDatasetCollectionDef, bool)
+
+*/
+
+func (c *XConfig)Stringify() string {
+  return fmt.Sprint(c)
+}
+
+func (c *XConfig)Set(key string, value interface{}) {
   // check if key contains "+" (forced array) and . (subset of config)
   // and just replace the value
   var valuetype int
@@ -335,14 +362,14 @@ func (c *XConfig) Set(key string, value interface{}) error {
     case float64: valuetype = 3
     case bool: valuetype = 4
   }
-  return c.setparam(0, key, valuetype, value)
+  c.setparam(0, key, valuetype, value)
 }
 
 /*
  If the existance of the key entry does matter, use Get. The second parameter is set to false when the entry does not existance
  You will have to cast your result
 */
-func (c *XConfig) Get(key string) (interface{}, bool) {
+func (c *XConfig)Get(key string) (interface{}, bool) {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     return val.Value, true
@@ -351,55 +378,147 @@ func (c *XConfig) Get(key string) (interface{}, bool) {
 }
 
 /*
- Get the string value of a string param. If the value is not string or does not exists, return ""
+  Get the sub config
 */
-func (c *XConfig) GetString(key string) string {
+func (c *XConfig)GetDataset(key string) (xcore.XDatasetDef, bool) {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
-      case string: return val.Value.(string)
+      case *XConfig: return val.Value.(*XConfig), true
     }
   }
-  return ""
+  return nil, false
+}
+
+func (c *XConfig)GetCollection(key string) (xcore.XDatasetCollectionDef, bool) {
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case xcore.XDatasetCollectionDef: return val.Value.(xcore.XDatasetCollectionDef), true
+    }
+  }
+  return nil, false
+}
+
+
+
+
+/*
+ Get the string value of a string param. If the value is not string or does not exists, return ""
+*/
+func (c *XConfig) GetString(key string) (string, bool) {
+  // check if key contains "." (subset of config)
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case string: return val.Value.(string), true
+    }
+  }
+  return "", false
 }
 
 /*
  Get the integer value of an int param. If the value is not int or does not exists, return 0
 */
-func (c *XConfig) GetInt(key string) int {
+func (c *XConfig) GetInt(key string) (int, bool) {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
-      case int: return val.Value.(int)
+      case int: return val.Value.(int), true
     }
   }
-  return 0
+  return 0, false
 }
 
 /*
  Get the float value of a float param. If the value is not float or does not exists, return 0
 */
-func (c *XConfig) GetFloat(key string) float64 {
+func (c *XConfig)GetFloat(key string) (float64, bool) {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
-      case float64: return val.Value.(float64)
+      case float64: return val.Value.(float64), true
     }
   }
-  return 0
+  return 0, false
 }
 
 /*
  Get the boolean value of a bool. If the value is not bool or does not exists, return false
 */
-func (c *XConfig) GetBool(key string) bool {
+func (c *XConfig)GetBool(key string) (bool, bool) {
   // check if key contains "." (subset of config)
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
-      case bool: return val.Value.(bool)
+      case bool: return val.Value.(bool), true
     }
   }
-  return false
+  return false, false
+}
+
+func (c *XConfig)GetStringCollection(key string) ([]string, bool) {
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case []string: return val.Value.([]string), true
+      case string: return []string{val.Value.(string)}, true
+    }
+  }
+  return nil, false
+}
+
+func (c *XConfig)GetBoolCollection(key string) ([]bool, bool) {
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case []bool: return val.Value.([]bool), true
+      case bool: return []bool{val.Value.(bool)}, true
+    }
+  }
+  return nil, false
+}
+
+func (c *XConfig)GetIntCollection(key string) ([]int, bool) {
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case []int: return val.Value.([]int), true
+      case int: return []int{val.Value.(int)}, true
+    }
+  }
+  return nil, false
+}
+
+func (c *XConfig)GetFloatCollection(key string) ([]float64, bool) {
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case []float64: return val.Value.([]float64), true
+      case float64: return []float64{val.Value.(float64)}, true
+    }
+  }
+  return nil, false
+}
+
+
+
+func (c *XConfig)Del(key string) {
+  delete((*c).Parameters, key)
+}
+
+
+
+
+
+
+
+
+
+/*
+ Get the subconfig. If the value is not a sub XConfig or does not exists, return nil
+*/
+func (c *XConfig) GetConfig(key string) *XConfig {
+  // check if key contains "." (subset of config)
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case *XConfig: return val.Value.(*XConfig)
+    }
+  }
+  return nil
 }
 
 // Accept only string, int, float64 and boolean values
@@ -417,6 +536,7 @@ func (c *XConfig) Add(key string, value interface{}) error {
   }
   return c.addparam(0, key, valuetype, value)
 }
+
 
 func (c *XConfig) LoadFile(filename string) error {
   return c.loadandparse(filename, false)

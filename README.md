@@ -14,10 +14,16 @@ TO DO:
 - implement Save
 - Add a flag when it's a multiple load to warn a "save"
 - Add error control con Get* for type conversions (if the type is different as expected)
+- Integrate with xcore.XDataset
 
 
 Version Changes Control
 =======================
+
+v0.0.5 - 2018-01-06
+-----------------------
+- XConfig object aligned with XDataset with missing set of functions
+- XConfig csn now be injected into an XTemplate
 
 V0.0.4 - 2018-12-21
 -----------------------
