@@ -3,6 +3,7 @@ package main
 import (
   "fmt"
   "testing"
+  "github.com/webability-go/xcore"
   "github.com/webability-go/xconfig"
 )
 
@@ -101,6 +102,32 @@ func TestArrayParam(t *testing.T) {
 //    t.Errorf("The array parameter is not correctly set")
 //  }
 }
+
+/* Test injection of a config into a template */
+func TestTemplate(t *testing.T) {
+
+  tmpl, _ := xcore.NewXTemplateFromString(`
+Some data:
+{{param1}}
+{{param2}}
+{{param3>data1}}
+{{param3>data2}}
+{{param4}}
+{{param5}}
+`)
+  
+  conf := xconfig.New()
+  conf.LoadString("param1=value1\nparam2=value2\nparam3.data1=value3-data1\nparam3.data2=value3-data2\nparam4=\"123\nparam5=\"on")
+  
+  fmt.Println(conf)
+  
+  result := tmpl.Execute(conf)
+  fmt.Println("Result: ", result)
+  
+}
+
+
+
 
 
 
