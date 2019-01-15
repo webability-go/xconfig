@@ -20,6 +20,10 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.0.6 - 2019-??-??
+-----------------------
+- Added conversion between types con Get* functions
+
 v0.0.5 - 2019-01-06
 -----------------------
 - XConfig object aligned with XDataset with missing set of functions

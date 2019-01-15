@@ -12,7 +12,7 @@ import (
   "github.com/webability-go/xcore"
 )
 
-const VERSION = "0.0.5"
+const VERSION = "0.0.6"
 
 /* Basic parameter. 
    The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = float, 4 = bool, 11 = array of strings, 12 = array of int, 13 = array of float, 14 = array of bool, 21 = XConfig
@@ -410,6 +410,7 @@ func (c *XConfig) GetString(key string) (string, bool) {
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
       case string: return val.Value.(string), true
+      default: return fmt.Sprint(val.Value), true
     }
   }
   return "", false
@@ -423,6 +424,12 @@ func (c *XConfig) GetInt(key string) (int, bool) {
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
       case int: return val.Value.(int), true
+      case float64: return int(val.Value.(float64)), true
+      case bool: if val.Value.(bool) {
+        return 1, true
+      } else {
+        return 0, true
+      }
     }
   }
   return 0, false
@@ -436,6 +443,12 @@ func (c *XConfig)GetFloat(key string) (float64, bool) {
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
       case float64: return val.Value.(float64), true
+      case int: return float64(val.Value.(int)), true
+      case bool: if val.Value.(bool) {
+        return 1.0, true
+      } else {
+        return 0.0, true
+      }
     }
   }
   return 0, false
@@ -449,6 +462,8 @@ func (c *XConfig)GetBool(key string) (bool, bool) {
   if val, ok := (*c).Parameters[key]; ok {
     switch val.Value.(type) {
       case bool: return val.Value.(bool), true
+      case int: return val.Value.(int)!=0, true
+      case float64: return val.Value.(float64)!=0, true
     }
   }
   return false, false
