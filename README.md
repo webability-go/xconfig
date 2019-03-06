@@ -20,6 +20,10 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.0.7 - 2019-03-06
+-----------------------
+- Added functions of Time to get time data.
+
 v0.0.6 - 2019-02-05
 -----------------------
 - Added conversion between types con Get* functions
