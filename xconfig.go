@@ -5,6 +5,7 @@ import (
   "errors"
   "bufio"
   "os"
+  "time"
   "strings"
   "strconv"
   "regexp"
@@ -12,7 +13,7 @@ import (
   "github.com/webability-go/xcore"
 )
 
-const VERSION = "0.0.6"
+const VERSION = "0.0.7"
 
 /* Basic parameter. 
    The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = float, 4 = bool, 11 = array of strings, 12 = array of int, 13 = array of float, 14 = array of bool, 21 = XConfig
@@ -455,6 +456,19 @@ func (c *XConfig)GetFloat(key string) (float64, bool) {
 }
 
 /*
+ Get the float value of a float param. If the value is not float or does not exists, return 0
+*/
+func (c *XConfig)GetTime(key string) (time.Time, bool) {
+  // check if key contains "." (subset of config)
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case time.Time: return val.Value.(time.Time), true
+    }
+  }
+  return time.Time{}, false
+}
+
+/*
  Get the boolean value of a bool. If the value is not bool or does not exists, return false
 */
 func (c *XConfig)GetBool(key string) (bool, bool) {
@@ -509,6 +523,15 @@ func (c *XConfig)GetFloatCollection(key string) ([]float64, bool) {
   return nil, false
 }
 
+func (c *XConfig)GetTimeCollection(key string) ([]time.Time, bool) {
+  if val, ok := (*c).Parameters[key]; ok {
+    switch val.Value.(type) {
+      case []time.Time: return val.Value.([]time.Time), true
+      case time.Time: return []time.Time{val.Value.(time.Time)}, true
+    }
+  }
+  return nil, false
+}
 
 
 func (c *XConfig)Del(key string) {
