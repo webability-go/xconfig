@@ -13,7 +13,7 @@ import (
   "github.com/webability-go/xcore"
 )
 
-const VERSION = "0.0.7"
+const VERSION = "0.0.8"
 
 /* Basic parameter. 
    The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = float, 4 = bool, 11 = array of strings, 12 = array of int, 13 = array of float, 14 = array of bool, 21 = XConfig
@@ -128,6 +128,16 @@ func (p *Parameter) add(paramtype int, value interface{}) error {
       return errors.New("Unknow parameter type")
   }
   return nil
+}
+
+func (p *Parameter)Clone() *Parameter {
+  cloned := newParam()
+  clonedval := p.Value
+  if cloneable, ok := clonedval.(interface{Clone() xcore.XDatasetDef }); ok {
+    clonedval = cloneable.Clone()
+  }
+  cloned.set(p.paramtype, clonedval)
+  return cloned
 }
 
 type XConfigDef interface {
@@ -536,6 +546,20 @@ func (c *XConfig)GetTimeCollection(key string) ([]time.Time, bool) {
 
 func (c *XConfig)Del(key string) {
   delete((*c).Parameters, key)
+}
+
+func (c *XConfig)Clone() xcore.XDatasetDef {
+  cloned := New()
+  for id, val := range c.Parameters {
+    cloned.Parameters[id] = *(&val).Clone()
+  }
+  for id, val := range c.Comments {
+    cloned.Comments[id] = val
+  }
+  cloned.Order = make([]string, len(c.Order))
+  copy(cloned.Order, c.Order)
+  cloned.Multiple = c.Multiple
+  return cloned
 }
 
 

@@ -126,6 +126,22 @@ Some data:
   
 }
 
+func TestClone(t *testing.T) {
+  // Test 1: assign a simple parameter string with some comments
+  conf := xconfig.New()
+  conf.LoadString("#First test\nparam1=value1\n\n;End of test 1\n")
+  
+  conf2 := conf.Clone()
+  conf.Set("param10", "value10")
+
+  // print what we got
+  fmt.Println("ANTES DE CLONE", conf)
+  fmt.Println("OBJETO CLONED", conf2)
+
+}
+
+
+
 
 
 
