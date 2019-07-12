@@ -13,7 +13,7 @@ import (
   "github.com/webability-go/xcore"
 )
 
-const VERSION = "0.0.8"
+const VERSION = "0.0.9"
 
 /* Basic parameter. 
    The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = float, 4 = bool, 11 = array of strings, 12 = array of int, 13 = array of float, 14 = array of bool, 21 = XConfig
@@ -340,7 +340,7 @@ func (c *XConfig) parsestring(data string, merge bool) error {
     return err
   }
   
-  fmt.Println(tempConfig)
+//  fmt.Println(tempConfig)
   
   c.parsemap(tempConfig, merge)
   return nil

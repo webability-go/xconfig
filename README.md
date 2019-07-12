@@ -20,6 +20,10 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.0.9 - 2019-07-12
+-----------------------
+- Incode println removed
+
 v0.0.8 - 2019-06-25
 -----------------------
 - Added Clone functions to meet xcore.XDatasetDef definition
