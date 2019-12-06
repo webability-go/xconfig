@@ -20,6 +20,18 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.1.0 - 2019-12-06
+-----------------------
+- Code formated before sending to github (gofmt -s)
+
+v0.0.9 - 2019-07-12
+-----------------------
+- Incode println removed
+
+v0.0.8 - 2019-06-25
+-----------------------
+- Added Clone functions to meet xcore.XDatasetDef definition
+
 v0.0.7 - 2019-03-06
 -----------------------
 - Added functions of Time to get time data.
@@ -224,6 +236,8 @@ Package reference:
 
 10. MergeXConfig
 
+11. Clone
+
 
 Internals:
 ----------
@@ -314,7 +328,7 @@ class myConfig extends XConfig
   private $default = array(
     'parameter1' => 'default1'
   );
-  
+
   public function __construct($data)
   {
     parent::__construct($data, $this->default);
