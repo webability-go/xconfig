@@ -129,6 +129,7 @@ func (p *Parameter) add(paramtype int, value interface{}) error {
 	return nil
 }
 
+// Clone is the parameter method to call to make a full clone of the information
 func (p *Parameter) Clone() *Parameter {
 	cloned := newParam()
 	clonedval := p.Value
@@ -139,6 +140,7 @@ func (p *Parameter) Clone() *Parameter {
 	return cloned
 }
 
+// XConfigDef is the config definition type
 type XConfigDef interface {
 	xcore.XDatasetDef
 }
