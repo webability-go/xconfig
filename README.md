@@ -20,6 +20,10 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.1.0 - 2019-12-06
+-----------------------
+- Code formated before sending to github (gofmt -s)
+
 v0.0.9 - 2019-07-12
 -----------------------
 - Incode println removed
@@ -324,7 +328,7 @@ class myConfig extends XConfig
   private $default = array(
     'parameter1' => 'default1'
   );
-  
+
   public function __construct($data)
   {
     parent::__construct($data, $this->default);
