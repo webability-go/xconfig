@@ -129,6 +129,7 @@ func (p *Parameter) add(paramtype int, value interface{}) error {
 	return nil
 }
 
+// Clone is the parameter method to call to make a full clone of the information
 func (p *Parameter) Clone() *Parameter {
 	cloned := newParam()
 	clonedval := p.Value
@@ -139,16 +140,7 @@ func (p *Parameter) Clone() *Parameter {
 	return cloned
 }
 
-func (p *Parameter)Clone() *Parameter {
-  cloned := newParam()
-  clonedval := p.Value
-  if cloneable, ok := clonedval.(interface{Clone() xcore.XDatasetDef }); ok {
-    clonedval = cloneable.Clone()
-  }
-  cloned.set(p.paramtype, clonedval)
-  return cloned
-}
-
+// XConfigDef is the config definition type
 type XConfigDef interface {
 	xcore.XDatasetDef
 }
@@ -592,20 +584,6 @@ func (c *XConfig) Clone() xcore.XDatasetDef {
 	copy(cloned.Order, c.Order)
 	cloned.Multiple = c.Multiple
 	return cloned
-}
-
-func (c *XConfig)Clone() xcore.XDatasetDef {
-  cloned := New()
-  for id, val := range c.Parameters {
-    cloned.Parameters[id] = *(&val).Clone()
-  }
-  for id, val := range c.Comments {
-    cloned.Comments[id] = val
-  }
-  cloned.Order = make([]string, len(c.Order))
-  copy(cloned.Order, c.Order)
-  cloned.Multiple = c.Multiple
-  return cloned
 }
 
 /*
