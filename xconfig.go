@@ -1,3 +1,30 @@
+// Copyright Philippe Thomassigny 2004-2020.
+// Use of this source code is governed by a MIT licence.
+// license that can be found in the LICENSE file.
+
+// Package xconfig is used to easily build a config object based on a descriptor file.
+//
+// The parameters can be nested, you it is easy to have a sub config set into the main config file.
+//
+// Config File format reference
+//
+// The config file is a simple utf8 flat text file.
+// Every entry is on the format:
+//
+//  parameter1=value1
+//  parameter2=value2
+//
+// You can add as many as parameters you wish into the file.
+//
+// 1. comments
+// You may add comments and comment unused parameter with #
+//
+//  # This is the config file for my application
+//  MAINPATH=/home/var
+//
+//  # Unused parameter:
+//  # DOMAIN=mydomain.com
+//
 package xconfig
 
 import (
@@ -13,11 +40,11 @@ import (
 	"github.com/webability-go/xcore"
 )
 
-const VERSION = "0.1.0"
+// VERSION is the used version nombre of the XCore library.
+const VERSION = "0.2.0"
 
-/* Basic parameter.
-   The type of the value can be 0 = not set, 1 = string, 2 = int, 3 = float, 4 = bool, 11 = array of strings, 12 = array of int, 13 = array of float, 14 = array of bool, 21 = XConfig
-*/
+// Parameter is the basic entry parameter into the configuration object
+// Value is the value of the parameter.
 type Parameter struct {
 	paramtype int
 	Value     interface{}
@@ -359,7 +386,11 @@ func (c *XConfig) parsestring(data string, merge bool) error {
 
 */
 
-func (c *XConfig) Stringify() string {
+func (c *XConfig) String() string {
+	return c.GoString()
+}
+
+func (c *XConfig) GoString() string {
 	return fmt.Sprint(c)
 }
 
