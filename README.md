@@ -20,6 +20,10 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.2.0 - 2020-02-10
+-----------------------
+- Modification to XConfig to meet xcore v1.0.0 (.String and .GoString functions added, .Stringify function removed)
+
 v0.1.0 - 2019-12-06
 -----------------------
 - Code formated before sending to github (gofmt -s)
