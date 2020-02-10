@@ -41,7 +41,7 @@ import (
 )
 
 // VERSION is the used version nombre of the XCore library.
-const VERSION = "0.2.0"
+const VERSION = "0.2.1"
 
 // Parameter is the basic entry parameter into the configuration object
 // Value is the value of the parameter.
@@ -387,11 +387,16 @@ func (c *XConfig) parsestring(data string, merge bool) error {
 */
 
 func (c *XConfig) String() string {
-	return c.GoString()
+	str := "XConfig[\n"
+	for key, val := range (*c).Parameters {
+		str += "  " + key + ":" + fmt.Sprint(val.Value) + "\n"
+	}
+	str += "]\n"
+	return str
 }
 
 func (c *XConfig) GoString() string {
-	return fmt.Sprint(c)
+	return c.String()
 }
 
 func (c *XConfig) Set(key string, value interface{}) {
