@@ -20,6 +20,11 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.2.1 - 2020-02-10
+-----------------------
+- Documentation enhanced
+- Bug corrected on String and GoString()
+
 v0.2.0 - 2020-02-10
 -----------------------
 - Modification to XConfig to meet xcore v1.0.0 (.String and .GoString functions added, .Stringify function removed)
