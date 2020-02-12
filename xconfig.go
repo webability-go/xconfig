@@ -2,28 +2,290 @@
 // Use of this source code is governed by a MIT licence.
 // license that can be found in the LICENSE file.
 
-// Package xconfig is used to easily build a config object based on a descriptor file.
+// Package xconfig loads a configuration file similar to a .ini file, but with some important improvements:
 //
-// The parameters can be nested, you it is easy to have a sub config set into the main config file.
+// - The xconfig recognize bool, int, float and Strings, and also collections of values and hierarchical nested sub-config sets.
 //
-// Config File format reference
+// - The xconfig is compatible with XDataset to inject and use in templates, database records, etc.
+//
+// - You can load more than one file in merge mode or replacing mode in the same config object.
+//
+// - You can set and get parameters at any time.
+//
+// - You can load the config object based on a file, but also on a string and another object; this way you can serialize, unserialize, transfer by any strem, save or load on database the object, etc.
+//
+// - You can also save back the config string with all its comments.
+//
+//
+// Basic use
+//
+// 1. Installing the package:
+//
+// Execute on your operating system:
+//
+//  go get -u github.com/webagility-go/xconfig
+//
+// 2. Importing the package:
+//
+//  import "github.com/webability-go/xconfig"
+//
+// 3. Then you need first to create a blank XConfig instance:
+//
+//  xc := xonfig.New()
+//
+// 4. Then, you generally load a file to fill in your XConfig definition
+//
+//  xc.LoadFile("/path/to/my/file.conf")
+//
+// 5. And finally use the configuration
+//
+//  myparam := xc.Get("myparam")
+//
+// myparam will take the type of the parameter: string, integer, float64, bool, or an array of string, integer or float64
+// (you should be aware of the type of your parameter before using it)
+//
+//
+// File format reference
 //
 // The config file is a simple utf8 flat text file.
-// Every entry is on the format:
+// The configuration file is a set of key=value parameters, with optional comments.
 //
+// The configuration file have the following syntax:
+//
+//  # this file is named example.conf, used in following examples
+//  # the # denotes a comment.
+//  ; is also a comment
 //  parameter1=value1
 //  parameter2=value2
+//  # Repeating the same parameter will create an array of values for this parameter
+//  parameter2=value3
+//
+//  # Creates a sub XConfig dataset for parameter, then again for subparameter
+//  parameter.subparameter.subparameter2=value
+//
+//  # Force to add the value to the parameter (with an extra '+'), in this case to the array of string values of parameter2
+//  parameter2+=value4
+//
+//  # Replace any value the parameter already has by this one (with an extra ':'), in this case parameter2 is a string again
+//  parameter2:=value4
 //
 // You can add as many as parameters you wish into the file.
 //
-// 1. comments
-// You may add comments and comment unused parameter with #
+//
+// 1. comments:
+//
+// You may add comments and also comment unused parameter with # or ; at the beginning of the line
 //
 //  # This is the config file for my application
 //  MAINPATH=/home/var
 //
 //  # Unused parameter:
 //  # DOMAIN=mydomain.com
+//
+//
+// 2. Parameter keys:
+//
+// The parameter key is a string with characters [a-zA-Z0-9_-] only, with a minimum of 1 character.
+//
+// The point (.) denotes a sub set of parameters (a new sub XConfig dataset for this parameter)
+//
+//  database.user=username
+//  database.pass=password
+//  database.db=dbname
+//
+// In this case the database entry of the XConfig is again another XConfig with 3 parameters  into it: user, pass and db.
+//
+//
+// 3. Assignation sign:
+//
+// A simple = sign is the normal assignation, the "add" or "replace" behaviour depends on the funcion called for loading the configuration (Load* or Merge* functions).
+//
+// In this case various asignation to the same parameter will create an array of values of the same type as the first declared parameter.
+//
+// An equal sign preceded by a + (+=) will always add the parameter to the array of values, never replace it (see Merge/Load).
+//
+// An equal sign preceded by a : (:=) will always replace the parameter and discard any already set values.
+//
+//
+// 4. Parameter values:
+//
+// There are 4 types of values:
+//
+// - Strings
+//
+// - Integer
+//
+// - Float
+//
+// - Boolean
+//
+// The value has no restrictions except it must enter into the line (no line breaks allowed)
+// The compiler accepts strings "true", "on", "yes" as a boolean 'true' and "false", "off", "no", "none" as a boolean 'false'.
+// For instance, that means parameter=off is a boolean false, and parameter=yes is a boolean true in the XConfig structure.
+//
+// The compiler also convert all integers to an int parameter in the XConfig structure, and float values as float64 type.
+// If you want a natural integer, float or boolean interpreted as a string, you must start it with a " character:
+// param1="123   will be the string 123 in the XConfig structure
+//
+// If you want a string starting with a ", you will need to put 2 " at the begining:
+// param=""abc   will be the string "abc in the XConfig structure
+//
+// 3. list of values:
+//
+// You can repeat as many time you need the same parameter name with different values.
+// This will build a list of values in the object.
+// The list of values is kept as an array of values.
+//
+// If you have a mixed type of values, you will get an error
+//
+// for instance:
+//
+//  # Those are booleans
+//  parameter1=true
+//  parameter2=on
+//  parameter3=no
+//
+//  # Those are integers
+//  parameter4=0
+//  parameter5=1
+//  parameter6=234
+//  parameter7=-5
+//  parameter8=837456783456
+//
+//  # Those are floats
+//  parameter10=0.0
+//  parameter11=1.7
+//  parameter12=234.5
+//  parameter13=-5.834
+//  parameter14=837456783.456
+//  parameter15=-5.834e7
+//
+//  # Those are strings
+//  parameter20=asdh
+//  parameter21="1
+//  parameter22="false
+//  parameter23="-5.834
+//  parameter24=""12345
+//  parameter25=something 123 true false on off
+//
+//  # This parameter will force parameter1 to become an array of booleans [true, false]
+//  parameter1=false
+//
+//  # This will throw an error since parameter1 is a boolean and abc is not a boolean
+//  parameter1=abc
+//
+//  # Note that is the first parameter is a string, all new values will should start with " to be considered as a string also:
+//  parameter30=hello
+//  parameter30="true
+//  parameter30="123
+//  # you will obtain an array []string with values ["hello", "true", "123"]
+//
+//  # List of authorized languages:
+//  languages=es
+//  languages=en
+//  languages=fr
+//  languages=jp
+//
+// The order IS important.
+//
+// Once loaded you will get a []string{“es”, “en”, “fr”, “jp”} assigned to the “languages” parameter.
+//
+//
+// Merging vs Loading
+//
+/*
++ and :
+
+You may merge two config file (or more), for example when you have a master config file and a local replacement values config file:
+```
+include_once 'include/xconfig/XConfig.class.php');
+$globalconfig = new XConfig(file_get_contents('myglobalconfig.conf'));
+$localconfig = new XConfig(file_get_contents('mylocalconfig.conf'));
+$globalconfig->merge($localconfig);
+```
+with files:
+```
+#global config:
+ip=127.0.0.1
+port=80
+domain=test.com
+```
+```
+#local config:
+port=8080
+title=Welcome
+```
+
+The result config after merging local into global will be:
+```
+ip=127.0.0.1
+port=8080
+domain=test.com
+title=Welcome
+```
+*/
+//
+// Advanced use
+//
+// The XConfig object is easily usable as:
+//
+//  // Using the New function
+//  config := xconfig.New(nil)
+//
+//  // Auto-new operator
+//  config := &xconfig.XConfig{}
+//
+//  // Default new operator
+//  config := new(xconfig.XConfig)
+//
+// or, if you load your own file by other means (remote, database etc)
+//
+//  config := &xconfig.XConfig{}
+//  mydata := getMyParameters()   // get the whole configuration file into mydata string
+//  config.LoadString(mydata)
+//
+// or, if you already have your configuration into a Map of Strings (unserialized, etc)
+//
+//  config := &xconfig.XConfig{}
+//  mydata := map[string]string{"param1":"value1","param2":"value2"}
+//  config.LoadXConfig(mydata)
+//
+// There are 3 sets of public functions:
+//
+// Load*: to load a file, a string dataset, or another XConfig dataset. Loading means all already existing parameters will be replaced by the new configuration.
+//
+// This is usefull when you have a main config file, and a local config file that must replace some values
+// Functions are LoadFile, LoadString and LoadXConfig
+//
+// Merge*: to merge a file, a string dataset, or another XConfig dataset. Merging means all new entries will be added to the already existing parameters.
+//
+// This is userfull then you split your config file into subset of parameters each (for instance database config, memory config, internationalization config, etc)
+// Functions are MergeFile, MergeString and MergeXConfig
+//
+// Get/Set/Add: to read, set (replace) or add (merge) parameters to the XConfig.
+//
+// Once you have an instance of your configuration, you may use it like this:
+//
+//  // assign a local variable
+//  param1 := config.Get("parameter1")
+//  fmt.Println(param1)
+//
+//  // assign to an already casted local variable
+//  var param2 string
+//  param2 = config.Get("parameter2").(string)  // be carefull that the parameter IS actually the same cast or an error is thrown
+//  fmt.Println(param2)
+//
+//  // use directly the parameters
+//  for p, v := range config {
+//    fmt.Printf("%s=%v\n", p, v)
+//  }
+//
+//  // set a new parameter
+//  config.Set("parameter3", "value3")
+//  config.Set("parameter3", "new value3") // will be replaced
+//  config.Add("parameter3", "another value3") // will be replaced by an array of values with both entries into it
+//  config.Set("parameter4", 12345)
+//  config.Set("parameter5", true)
 //
 package xconfig
 
@@ -41,7 +303,7 @@ import (
 )
 
 // VERSION is the used version nombre of the XCore library.
-const VERSION = "0.2.1"
+const VERSION = "0.3.0"
 
 // Parameter is the basic entry parameter into the configuration object
 // Value is the value of the parameter.
