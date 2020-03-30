@@ -20,15 +20,25 @@ Manuals are available on godoc.org [![GoDoc](https://godoc.org/github.com/webabi
 
 TO DO:
 ======
-
+- Make it thread safe ? (so maybe with a flag to activate it ?)
+- Add Time ? Other types of int32, int64, float32, runes etc ?
 - Merge vs load to load more than 1 file (pending)
-- implement + and : *
+- implement + and :
 - implement Save
 - Add a flag when it's a multiple load to warn a "save"
 - Add error control con Get* for type conversions (if the type is different as expected)
+- Log errors into official log
 
 Version Changes Control
 =======================
+
+v0.4.0 - 2020-03-29
+-----------------------
+- Modulatization (go mod init) and use of xcore/v2
+- Documentation finished
+- Comments into code, corrections to meet golint standards
+- String modified to order printed lines and get a uniform result if the XConfig contains the same data
+- Tests implemented to verify official defined specs
 
 v0.3.0 - 2020-02-11
 -----------------------
