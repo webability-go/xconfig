@@ -2,10 +2,57 @@ package xconfig
 
 import (
 	"fmt"
+	"io/ioutil"
 	"testing"
 
-	"github.com/webability-go/xcore"
+	"github.com/webability-go/xcore/v2"
 )
+
+func TestLoads(t *testing.T) {
+	// Test 1: assign a simple parameter string with some comments
+	conf0 := New()
+	content, err := ioutil.ReadFile("testunit/a.conf")
+	if err != nil {
+		t.Errorf("Error loading a.conf")
+		return
+	}
+	conf0.LoadString(string(content))
+
+	conf0p := New()
+	conf0p.MergeString(string(content))
+
+	conf1 := New()
+	conf1.LoadFile("testunit/a.conf")
+
+	conf2 := New()
+	conf2.MergeFile("testunit/a.conf") // load is same as merge on first time
+
+	conf3 := New()
+	conf3.LoadXConfig(conf1) // load is same as merge on first time
+
+	conf4 := New()
+	conf4.MergeXConfig(conf1) // load is same as merge on first time
+
+	// print what we got
+	s0 := fmt.Sprint(conf0)
+	s0p := fmt.Sprint(conf0p)
+	s1 := fmt.Sprint(conf1)
+	s2 := fmt.Sprint(conf2)
+	s3 := fmt.Sprint(conf3)
+	s4 := fmt.Sprint(conf4)
+	/*
+		fmt.Println(s0)
+		fmt.Println(s0p)
+		fmt.Println(s1)
+		fmt.Println(s2)
+		fmt.Println(s3)
+		fmt.Println(s4)
+	*/
+
+	if s1 != s2 || s1 != s3 || s1 != s4 || s1 != s0 || s1 != s0p {
+		t.Errorf("error loading and merging natural files")
+	}
+}
 
 func TestOneStringParam(t *testing.T) {
 	// Test 1: assign a simple parameter string with some comments
