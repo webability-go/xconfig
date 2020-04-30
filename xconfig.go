@@ -318,9 +318,9 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -330,7 +330,7 @@ import (
 )
 
 // VERSION is the used version nombre of the XCore library.
-const VERSION = "0.4.0"
+const VERSION = "0.4.1"
 
 // Parameter is the basic entry parameter into the configuration object
 // Value is the value of the parameter.
@@ -615,10 +615,10 @@ func (c *XConfig) parseline(line int, data string, merge bool) error {
 }
 
 func (c *XConfig) parsemap(data *XConfig, merge bool) error {
-	if (*c).Parameters == nil {
-		(*c).Parameters = (*data).Parameters
-		(*c).Comments = (*data).Comments
-		(*c).Order = (*data).Order
+	if len(c.Parameters) == 0 {
+		c.Parameters = data.Parameters
+		c.Comments = data.Comments
+		c.Order = data.Order
 	} else {
 		line := len((*c).Order)
 		for p, v := range (*data).Parameters {
@@ -646,12 +646,14 @@ func (c *XConfig) loadandparse(filename string, merge bool) error {
 
 	tempConfig := New()
 	scanner := bufio.NewScanner(file)
+	ln := 1
 	for scanner.Scan() {
 		line := scanner.Text()
-		err := tempConfig.parseline(2, line, merge)
+		err := tempConfig.parseline(ln, line, merge)
 		if err != nil {
 			return err
 		}
+		ln++
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -694,16 +696,19 @@ func (c *XConfig) parsestring(data string, merge bool) error {
 // String will create a string of the ordered content of the XConfig
 func (c *XConfig) String() string {
 	sdata := []string{}
-	for key, val := range (*c).Parameters {
-		sdata = append(sdata, "  "+key+":"+fmt.Sprint(val.Value))
+	for _, val := range c.Order {
+		if val[0] == '#' {
+			sdata = append(sdata, c.Comments[val])
+		} else {
+			sdata = append(sdata, val+":"+fmt.Sprint(c.Parameters[val].Value))
+		}
 	}
-	sort.Strings(sdata) // Lets be sure the print is always the same presentation
 	return "XConfig[\n" + strings.Join(sdata, "\n") + "\n]\n"
 }
 
 // GoString will create a string of the ordered content of the XConfig (based on String)
 func (c *XConfig) GoString() string {
-	return c.String()
+	return "#" + c.String()
 }
 
 // Set will replace or create the value of the key entry
@@ -995,6 +1000,53 @@ func (c *XConfig) LoadXConfig(data *XConfig) error {
 // MergeXConfig will merge the new XConfig to the existing one
 func (c *XConfig) MergeXConfig(data *XConfig) error {
 	return c.parsemap(data, true)
+}
+
+func (c *XConfig) buildLevel(prefix string) string {
+	sdata := []string{}
+	for _, val := range c.Order {
+		if val[0] == '#' {
+			sdata = append(sdata, c.Comments[val])
+		} else {
+			switch c.Parameters[val].paramtype {
+			case 11:
+				a := c.Parameters[val].Value.([]string)
+				for _, v := range a {
+					sdata = append(sdata, prefix+val+"="+v)
+				}
+			case 12:
+				a := c.Parameters[val].Value.([]int)
+				for _, v := range a {
+					sdata = append(sdata, prefix+val+"="+strconv.Itoa(v))
+				}
+			case 13:
+				a := c.Parameters[val].Value.([]float64)
+				for _, v := range a {
+					sdata = append(sdata, prefix+val+"="+fmt.Sprint(v))
+				}
+			case 14:
+				a := c.Parameters[val].Value.([]bool)
+				for _, v := range a {
+					sdata = append(sdata, prefix+val+"="+fmt.Sprint(v))
+				}
+			case 21:
+				a := c.Parameters[val].Value.(*XConfig)
+				sdata = append(sdata, a.buildLevel(prefix+val+"."))
+			default:
+				sdata = append(sdata, prefix+val+"="+fmt.Sprint(c.Parameters[val].Value))
+			}
+		}
+	}
+	return strings.Join(sdata, "\n")
+}
+
+func (c *XConfig) Marshal() string {
+	return c.buildLevel("") + "\n"
+}
+
+func (c *XConfig) SaveFile(filename string) error {
+	data := c.Marshal()
+	return ioutil.WriteFile(filename, []byte(data), 0x644)
 }
 
 func analyzeKey(key string) (interface{}, bool) {

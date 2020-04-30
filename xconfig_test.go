@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"testing"
-
-	"github.com/webability-go/xcore/v2"
 )
 
 func TestLoads(t *testing.T) {
@@ -150,29 +148,6 @@ func TestArrayParam(t *testing.T) {
 	//  }
 }
 
-/* Test injection of a config into a template */
-func TestTemplate(t *testing.T) {
-
-	tmpl, _ := xcore.NewXTemplateFromString(`
-Some data:
-{{param1}}
-{{param2}}
-{{param3>data1}}
-{{param3>data2}}
-{{param4}}
-{{param5}}
-`)
-
-	conf := New()
-	conf.LoadString("param1=value1\nparam2=value2\nparam3.data1=value3-data1\nparam3.data2=value3-data2\nparam4=\"123\nparam5=\"on")
-
-	fmt.Println(conf)
-
-	result := tmpl.Execute(conf)
-	fmt.Println("Result: ", result)
-
-}
-
 func TestClone(t *testing.T) {
 	// Test 1: assign a simple parameter string with some comments
 	conf := New()
@@ -184,5 +159,17 @@ func TestClone(t *testing.T) {
 	// print what we got
 	fmt.Println("ANTES DE CLONE", conf)
 	fmt.Println("OBJETO CLONED", conf2)
+
+}
+
+func TestStructure(t *testing.T) {
+	conf := New()
+	err := conf.LoadFile("testunit/example.conf")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	fmt.Printf(conf.Marshal())
 
 }
