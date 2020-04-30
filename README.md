@@ -32,6 +32,11 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.4.1 - 2020-03-29
+-----------------------
+- Marshal and SaveFile implemented to generate original string of XConfig file and save it to a file.
+- example directory removed. The examples are implicitly into documentation and tests.
+
 v0.4.0 - 2020-03-29
 -----------------------
 - Modulatization (go mod init) and use of xcore/v2
