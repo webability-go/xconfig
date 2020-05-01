@@ -330,7 +330,7 @@ import (
 )
 
 // VERSION is the used version nombre of the XCore library.
-const VERSION = "0.4.1"
+const VERSION = "0.4.2"
 
 // Parameter is the basic entry parameter into the configuration object
 // Value is the value of the parameter.
@@ -514,7 +514,7 @@ func (c *XConfig) addparam(line int, key string, typeparam int, value interface{
 		firstkey := strings.TrimSpace(key[:pospoint])
 		subkey := strings.TrimSpace(key[pospoint+1:])
 
-		if val, ok := (*c).Parameters[firstkey]; ok {
+		if val, ok := c.Parameters[firstkey]; ok {
 			// already exists: add the sub parameters, val is an *XConfig
 			val.Value.(*XConfig).addparam(line, subkey, typeparam, value, assignment)
 		} else {
@@ -525,11 +525,11 @@ func (c *XConfig) addparam(line int, key string, typeparam int, value interface{
 				return err
 			}
 			p.Value.(*XConfig).addparam(line, subkey, typeparam, value, assignment)
-			(*c).Parameters[firstkey] = *p
+			c.Parameters[firstkey] = *p
 			c.Order = append(c.Order, firstkey)
 		}
 	} else {
-		if val, ok := (*c).Parameters[key]; ok {
+		if val, ok := c.Parameters[key]; ok {
 			p := newParam()
 			err := p.add(val.paramtype, val.Value, assignment)
 			if err != nil {
@@ -539,14 +539,14 @@ func (c *XConfig) addparam(line int, key string, typeparam int, value interface{
 			if err != nil {
 				return err
 			}
-			(*c).Parameters[key] = *p
+			c.Parameters[key] = *p
 		} else {
 			p := newParam()
 			err := p.add(typeparam, value, assignment)
 			if err != nil {
 				return err
 			}
-			(*c).Parameters[key] = *p
+			c.Parameters[key] = *p
 			c.Order = append(c.Order, key)
 		}
 	}
@@ -560,8 +560,10 @@ func (c *XConfig) setparam(line int, key string, typeparam int, value interface{
 	//  mustmerge := false
 	p := newParam()
 	p.add(typeparam, value, assignment)
-	(*c).Parameters[key] = *p
-	c.Order = append(c.Order, key)
+	if _, ok := c.Parameters[key]; !ok {
+		c.Order = append(c.Order, key)
+	}
+	c.Parameters[key] = *p
 	return nil
 }
 
@@ -620,7 +622,7 @@ func (c *XConfig) parsemap(data *XConfig, merge bool) error {
 		c.Comments = data.Comments
 		c.Order = data.Order
 	} else {
-		line := len((*c).Order)
+		line := len(c.Order)
 		for p, v := range (*data).Parameters {
 			if merge {
 				c.addparam(line, p, v.paramtype, v.Value, v.assignment)
@@ -628,7 +630,7 @@ func (c *XConfig) parsemap(data *XConfig, merge bool) error {
 				c.setparam(line, p, v.paramtype, v.Value, v.assignment)
 			}
 		}
-		(*c).Multiple = true
+		c.Multiple = true
 	}
 	return nil
 }
@@ -729,11 +731,31 @@ func (c *XConfig) Set(key string, value interface{}) {
 	c.setparam(0, key, valuetype, value, 1)
 }
 
+// Add will adds a value to the structure. If the key entry already exists, then try to build a collection of it
+func (c *XConfig) Add(key string, value interface{}) error {
+	// check if key contains "+" (forced array) and . (subset of config)
+	// and creates a Map[] if the value already exists (or just set it)
+	var valuetype int
+	switch value.(type) {
+	case string:
+		valuetype = 1
+	case int:
+		valuetype = 2
+	case float64:
+		valuetype = 3
+	case bool:
+		valuetype = 4
+	default:
+		return errors.New("The XConfig.Add function only accept string, integer, float64 and boolean values")
+	}
+	return c.addparam(0, key, valuetype, value, 0)
+}
+
 // Get will return the value of the key entry
 // return false as second parameter if the entry does not exists (remember a value can be NIL and exists)
 func (c *XConfig) Get(key string) (interface{}, bool) {
 	// check if key contains "." (subset of config)
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		return val.Value, true
 	}
 	return nil, false
@@ -743,7 +765,7 @@ func (c *XConfig) Get(key string) (interface{}, bool) {
 // return false as second parameter if the entry does not exists (remember a value can be NIL and exists)
 func (c *XConfig) GetDataset(key string) (xcore.XDatasetDef, bool) {
 	// check if key contains "." (subset of config)
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case *XConfig:
 			return val.Value.(*XConfig), true
@@ -755,7 +777,7 @@ func (c *XConfig) GetDataset(key string) (xcore.XDatasetDef, bool) {
 // GetCollection will return the key entry data as an XDatasetCollectionDef if it exists and is a XDatasetCollectionDef
 // return false as second parameter if the entry does not exists (remember a value can be NIL and exists)
 func (c *XConfig) GetCollection(key string) (xcore.XDatasetCollectionDef, bool) {
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case xcore.XDatasetCollectionDef:
 			return val.Value.(xcore.XDatasetCollectionDef), true
@@ -768,7 +790,7 @@ func (c *XConfig) GetCollection(key string) (xcore.XDatasetCollectionDef, bool) 
 // return false as second parameter if the entry does not exists (remember a value can be "" and exists)
 func (c *XConfig) GetString(key string) (string, bool) {
 	// check if key contains "." (subset of config)
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case string:
 			return val.Value.(string), true
@@ -783,7 +805,7 @@ func (c *XConfig) GetString(key string) (string, bool) {
 // return false as second parameter if the entry does not exists (remember a value can be 0 and exists)
 func (c *XConfig) GetInt(key string) (int, bool) {
 	// check if key contains "." (subset of config)
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case int:
 			return val.Value.(int), true
@@ -803,7 +825,7 @@ func (c *XConfig) GetInt(key string) (int, bool) {
 // return false as second parameter if the entry does not exists (remember a value can be 0 and exists)
 func (c *XConfig) GetFloat(key string) (float64, bool) {
 	// check if key contains "." (subset of config)
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case float64:
 			return val.Value.(float64), true
@@ -823,7 +845,7 @@ func (c *XConfig) GetFloat(key string) (float64, bool) {
 // return false as second parameter if the entry does not exists (remember a value can be 0 and exists)
 func (c *XConfig) GetTime(key string) (time.Time, bool) {
 	// check if key contains "." (subset of config)
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case time.Time:
 			return val.Value.(time.Time), true
@@ -836,7 +858,7 @@ func (c *XConfig) GetTime(key string) (time.Time, bool) {
 // return false as second parameter if the entry does not exists (remember a value can be false and exists)
 func (c *XConfig) GetBool(key string) (bool, bool) {
 	// check if key contains "." (subset of config)
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case bool:
 			return val.Value.(bool), true
@@ -852,7 +874,7 @@ func (c *XConfig) GetBool(key string) (bool, bool) {
 // GetStringCollection will return the key entry data as a []string, or nil
 // return false as second parameter if the entry does not exists (remember a value can be nil and exists)
 func (c *XConfig) GetStringCollection(key string) ([]string, bool) {
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case []string:
 			return val.Value.([]string), true
@@ -866,7 +888,7 @@ func (c *XConfig) GetStringCollection(key string) ([]string, bool) {
 // GetBoolCollection will return the key entry data as a []bool, or nil
 // return false as second parameter if the entry does not exists (remember a value can be nil and exists)
 func (c *XConfig) GetBoolCollection(key string) ([]bool, bool) {
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case []bool:
 			return val.Value.([]bool), true
@@ -880,7 +902,7 @@ func (c *XConfig) GetBoolCollection(key string) ([]bool, bool) {
 // GetIntCollection will return the key entry data as a []int, or nil
 // return false as second parameter if the entry does not exists (remember a value can be nil and exists)
 func (c *XConfig) GetIntCollection(key string) ([]int, bool) {
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case []int:
 			return val.Value.([]int), true
@@ -894,7 +916,7 @@ func (c *XConfig) GetIntCollection(key string) ([]int, bool) {
 // GetFloatCollection will return the key entry data as a []float64, or nil
 // return false as second parameter if the entry does not exists (remember a value can be nil and exists)
 func (c *XConfig) GetFloatCollection(key string) ([]float64, bool) {
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case []float64:
 			return val.Value.([]float64), true
@@ -908,7 +930,7 @@ func (c *XConfig) GetFloatCollection(key string) ([]float64, bool) {
 // GetTimeCollection will return the key entry data as a []Time, or nil
 // return false as second parameter if the entry does not exists (remember a value can be nil and exists)
 func (c *XConfig) GetTimeCollection(key string) ([]time.Time, bool) {
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case []time.Time:
 			return val.Value.([]time.Time), true
@@ -921,7 +943,14 @@ func (c *XConfig) GetTimeCollection(key string) ([]time.Time, bool) {
 
 // Del will delete then entry key it exists
 func (c *XConfig) Del(key string) {
-	delete((*c).Parameters, key)
+	delete(c.Parameters, key)
+	delete(c.Comments, key)
+	// deletes from Order and comments too
+	for idx, v := range c.Order {
+		if v == key {
+			c.Order = append(c.Order[:idx], c.Order[idx+1:]...)
+		}
+	}
 }
 
 // Clone will perform a full clone of the whole structure
@@ -943,33 +972,13 @@ func (c *XConfig) Clone() xcore.XDatasetDef {
 // This is similar to the GetDataset function
 func (c *XConfig) GetConfig(key string) *XConfig {
 	// check if key contains "." (subset of config)
-	if val, ok := (*c).Parameters[key]; ok {
+	if val, ok := c.Parameters[key]; ok {
 		switch val.Value.(type) {
 		case *XConfig:
 			return val.Value.(*XConfig)
 		}
 	}
 	return nil
-}
-
-// Add will adds a value to the structure. If the key entry already exists, then try to build a collection of it
-func (c *XConfig) Add(key string, value interface{}) error {
-	// check if key contains "+" (forced array) and . (subset of config)
-	// and creates a Map[] if the value already exists (or just set it)
-	var valuetype int
-	switch value.(type) {
-	case string:
-		valuetype = 1
-	case int:
-		valuetype = 2
-	case float64:
-		valuetype = 3
-	case bool:
-		valuetype = 4
-	default:
-		return errors.New("The XConfig.Add function only accept string, integer, float64 and boolean values")
-	}
-	return c.addparam(0, key, valuetype, value, 0)
 }
 
 // LoadFile will try to load the file and parse it into the XConfig structure
