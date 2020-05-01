@@ -24,13 +24,17 @@ TO DO:
 - Add Time ? Other types of int32, int64, float32, runes etc ?
 - Merge vs load to load more than 1 file (pending)
 - implement + and :
-- implement Save
 - Add a flag when it's a multiple load to warn a "save"
 - Add error control con Get* for type conversions (if the type is different as expected)
 - Log errors into official log
 
 Version Changes Control
 =======================
+
+v0.4.2 - 2020-03-30
+-----------------------
+- Pointers to self structure changed (c.Parameters instead of (*c).Parameters)
+- Del/Set/Add function now work correctly and do not duplicate entries if not merged (Add)
 
 v0.4.1 - 2020-03-29
 -----------------------

@@ -173,3 +173,13 @@ func TestStructure(t *testing.T) {
 	fmt.Printf(conf.Marshal())
 
 }
+
+func TestDel(t *testing.T) {
+	// Test 4:
+	conf := New()
+	conf.LoadString("param1=0.123\nparam2=12e7\nparam3=-76364.2")
+
+	fmt.Println(conf)
+	conf.Del("param1")
+	fmt.Println(conf)
+}
