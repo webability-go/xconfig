@@ -31,6 +31,11 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.4.3 - 2021-11-16
+-----------------------
+- Documentation revised and added with Marshal and SaveFile Functions
+- Bug corrected in Marshal, sometimes an empty line was ignored by the reconstruction of the string
+
 v0.4.2 - 2020-03-30
 -----------------------
 - Pointers to self structure changed (c.Parameters instead of (*c).Parameters)
