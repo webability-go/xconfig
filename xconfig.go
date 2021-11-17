@@ -37,12 +37,22 @@
 //
 //  xc.LoadFile("/path/to/my/file.conf")
 //
-// 5. And finally use the configuration
+// 5. Use the configuration
 //
 //  myparam := xc.Get("myparam")
 //
-// myparam will take the type of the parameter: string, integer, float64, bool, or an array of string, integer or float64
-// (you should be aware of the type of your parameter before using it)
+// myparam will take the type of the parameter: string, integer, float64, bool, or an array of string, integer or float64.
+// (you should be aware of the type of your parameter before using it).
+// You can also use the Get* cast functions.
+//
+// 6. You can also set some new parameters
+//
+//  xc.Set("mynewparam", "newvalue")
+//
+// 7. And finally save the new configuration
+//
+//  xc.SaveFile("/path/to/my/file.conf")
+//
 //
 //
 // File format reference
@@ -136,7 +146,7 @@
 // This will build a list of values in the object.
 // The list of values is kept as an array of values.
 //
-// If you have a mixed type of values, you will get an error
+// If you have a mixed type of values, you will get an error.
 //
 // for instance:
 //
@@ -300,17 +310,25 @@
 //  config.Set("parameter5", true)
 //
 //
-// Advanced topics
 //
-// Parsing and algorithms
+// Saving configuration
 //
-// LoadFile: load file in string then call LoadString
-// MergeFile: load file in string then call MergeString
-// loadstring: parse string in temporary XConfig then call LoadXConfig
-// Mergestring: parse string in temporary XConfig then call MergeXConfig
-// LoadXConfig: call parsemap with merge=false
-// MergeConfig: call parsemap with merge=true
-// parsemap:
+// After loading, creating, modifying your configuration file, you may need to save your configuration.
+//
+// For this yoy have 2 functions:
+//
+//
+//  config := &xconfig.XConfig{}
+//  config.Set("myparam1", "My value")
+//  // Create a string with the content of the new config:
+//  fmt.Println(config.Marshal())
+//
+//  // Directly save the modified config file:
+//  config.SaveFile("path/to/your/file.conf")
+//
+// Note: if you load your configuration file with comments in it, when you save it, the comments and presentation (new lines) will be respected.
+// If you add new parameters, they will be added to the end of the file. New lines will be removed into the definition of an array of data.
+//
 //
 package xconfig
 
@@ -330,7 +348,7 @@ import (
 )
 
 // VERSION is the used version nombre of the XCore library.
-const VERSION = "0.4.2"
+const VERSION = "0.4.3"
 
 // Parameter is the basic entry parameter into the configuration object
 // Value is the value of the parameter.
