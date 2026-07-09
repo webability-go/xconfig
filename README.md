@@ -27,6 +27,11 @@ TO DO:
 Version Changes Control
 =======================
 
+v0.5.1 - 2026-07-08
+-----------------------
+- Updgrade of libraries in go.mod/go.sum to avoid error into golang.org/x/text v < 0-3-8  and others
+
+
 v0.5.0 - 2026-05-27
 -----------------------
 - Big security and corrections update

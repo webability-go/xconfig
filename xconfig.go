@@ -326,7 +326,7 @@ import (
 )
 
 // VERSION is the semantic version of the XConfig library.
-const VERSION = "0.5.0"
+const VERSION = "0.5.1"
 
 // Parameter is an internal storage unit for a single configuration entry.
 //
