@@ -1,6 +1,4 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/webability-go/xconfig)](https://goreportcard.com/report/github.com/webability-go/xconfig)
 [![GoDoc](https://godoc.org/github.com/webability-go/xconfig?status.png)](https://godoc.org/github.com/webability-go/xconfig)
-[![GolangCI](https://golangci.com/badges/github.com/webability-go/xconfig.svg)](https://golangci.com)
 
 XConfig for GO v1
 =============================
