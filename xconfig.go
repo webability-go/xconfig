@@ -1,344 +1,322 @@
-// Copyright Philippe Thomassigny 2004-2020.
+// Copyright Philippe Thomassigny 2004-2026.
 // Use of this source code is governed by a MIT licence.
 // license that can be found in the LICENSE file.
 
-// Package xconfig loads a configuration file similar to a .ini file, but with some important improvements:
+// Package xconfig provides a thread-safe, ordered configuration manager that
+// reads and writes .conf files in a structured key=value format.
 //
-// - The xconfig recognize bool, int, float and Strings, and also collections of values and hierarchical nested sub-config sets.
+// It extends the classic INI-file concept with automatic type inference,
+// multi-value arrays, nested sub-configurations via dotted key notation, and
+// full compatibility with the [xcore.XDatasetDef] interface for use in
+// templates, database adapters, and other xcore-aware components.
 //
-// - The xconfig is compatible with XDataset to inject and use in templates, database records, etc.
+// # Installation
 //
-// - You can load more than one file in merge mode or replacing mode in the same config object.
+//	go get -u github.com/webability-go/xconfig
 //
-// - You can set and get parameters at any time.
+// # Quick start
 //
-// - You can load the config object based on a file, but also on a string and another object; this way you can serialize, unserialize, transfer by any strem, save or load on database the object, etc.
+//	xc := xconfig.New()
 //
-// - You can also save back the config string with all its comments.
+//	if err := xc.LoadFile("app.conf"); err != nil {
+//	    log.Fatal(err)
+//	}
 //
+//	host, _ := xc.GetString("host")
+//	port, _ := xc.GetInt("port")
+//	debug, _ := xc.GetBool("debug")
 //
-// Basic use
+//	xc.Set("build", "1.2.3")
 //
-// 1. Installing the package:
+//	if err := xc.SaveFile("app.conf"); err != nil {
+//	    log.Fatal(err)
+//	}
 //
-// Execute on your operating system:
+// # File format
 //
-//  go get -u github.com/webagility-go/xconfig
+// Configuration files are UTF-8 plain text. Lines beginning with # or ; are
+// treated as comments and are preserved verbatim during serialisation. Blank
+// lines are also preserved. All other lines must follow one of the three
+// assignment forms:
 //
-// 2. Importing the package:
+//	key=value           # normal assignment
+//	key:=value          # force-replace — overwrites even when merging
+//	key+=value          # force-add    — appends even when loading
 //
-//  import "github.com/webability-go/xconfig"
+// Keys are case-sensitive and must not contain whitespace or the '=' character.
+// Leading and trailing whitespace around both the key and the value is trimmed
+// automatically. An empty key is silently ignored.
 //
-// 3. Then you need first to create a blank XConfig instance:
+// A complete example file:
 //
-//  xc := xonfig.New()
+//	# app.conf
+//	; semicolons are also comments
 //
-// 4. Then, you generally load a file to fill in your XConfig definition
+//	host=db.example.com
+//	port=5432
+//	debug=false
 //
-//  xc.LoadFile("/path/to/my/file.conf")
+//	# repeated keys become arrays
+//	tag=stable
+//	tag=v2
 //
-// 5. Use the configuration
+//	# dotted keys create nested sub-configurations
+//	cache.host=redis.example.com
+//	cache.port=6379
+//	cache.ttl=300
 //
-//  myparam := xc.Get("myparam")
+//	# per-entry operator overrides
+//	host:=override.example.com   # always replaces, even in MergeFile
+//	tag+=canary                  # always appends,  even in LoadFile
 //
-// myparam will take the type of the parameter: string, integer, float64, bool, or an array of string, integer or float64.
-// (you should be aware of the type of your parameter before using it).
-// You can also use the Get* cast functions.
+// # Type inference
 //
-// 6. You can also set some new parameters
+// The parser infers the stored Go type from the raw value string:
 //
-//  xc.Set("mynewparam", "newvalue")
+//	Value in file              Stored Go type   Stored value
+//	─────────────────────────  ───────────────  ────────────
+//	true  / on  / yes         bool             true
+//	false / off / no / none   bool             false
+//	42, -7, 1000000           int              (integer)
+//	3.14, -0.5, 1.5e-3        float64          (float)
+//	anything else             string           (as-is)
 //
-// 7. And finally save the new configuration
+// Because the parser tries bool → int → float → string in that order, values
+// such as "1" become int, and "1.0" become float64. Use the forced-string
+// prefix described below if you need to store such values as strings.
 //
-//  xc.SaveFile("/path/to/my/file.conf")
+// # Forced-string prefix
 //
+// Prefixing a value with a double-quote character (") forces string storage
+// regardless of the value content, and the prefix itself is stripped:
 //
+//	count="123          # stores the string  "123"  (not int 123)
+//	flag="true          # stores the string  "true" (not bool true)
+//	ratio="1.0          # stores the string  "1.0"  (not float 1.0)
+//	empty="             # stores the string  ""
 //
-// File format reference
+// To store a string whose first character is itself a double-quote, use two
+// consecutive double-quote characters as the prefix:
 //
-// The config file is a simple utf8 flat text file.
-// The configuration file is a set of key=value parameters, with optional comments.
+//	label=""+quoted     # stores the string  `"+quoted`
 //
-// The configuration file have the following syntax:
+// [Marshal] and [XConfig.SaveFile] restore these prefixes automatically, so a
+// save-then-load cycle is always lossless.
 //
-//  # this file is named example.conf, used in following examples
-//  # the # denotes a comment.
-//  ; is also a comment
-//  parameter1=value1
-//  parameter2=value2
-//  # Repeating the same parameter will create an array of values for this parameter
-//  parameter2=value3
+// # Multi-value parameters (arrays)
 //
-//  # Creates a sub XConfig dataset for parameter, then again for subparameter
-//  parameter.subparameter.subparameter2=value
+// Repeating a key on successive lines promotes the stored value from a scalar
+// to a typed slice. Values are appended in the order they appear in the file:
 //
-//  # Force to add the value to the parameter (with an extra '+'), in this case to the array of string values of parameter2
-//  parameter2+=value4
+//	country=MX
+//	country=US
+//	country=FR
+//	# → country  []string{"MX", "US", "FR"}
 //
-//  # Replace any value the parameter already has by this one (with an extra ':'), in this case parameter2 is a string again
-//  parameter2:=value4
+//	port=8080
+//	port=8081
+//	port=8082
+//	# → port  []int{8080, 8081, 8082}
 //
-// You can add as many as parameters you wish into the file.
+//	ratio=0.25
+//	ratio=0.75
+//	# → ratio  []float64{0.25, 0.75}
 //
+//	flag=true
+//	flag=false
+//	# → flag  []bool{true, false}
 //
-// 1. comments:
+// All values for a given key must be of the same inferred type. Mixing types
+// (e.g. an int followed by a bool for the same key) returns an error.
 //
-// You may add comments and also comment unused parameter with # or ; at the beginning of the line
+// # Nested sub-configurations
 //
-//  # This is the config file for my application
-//  MAINPATH=/home/var
+// A dot in a key name creates a hierarchy. Each segment names a sub-XConfig:
 //
-//  # Unused parameter:
-//  # DOMAIN=mydomain.com
+//	database.host=db.example.com
+//	database.port=5432
+//	database.tls=true
+//	# → "database" is a *XConfig containing host, port, tls
 //
+// Nesting can be arbitrarily deep:
 //
-// 2. Parameter keys:
+//	app.cache.redis.host=cache.example.com
+//	app.cache.redis.port=6379
+//	app.cache.redis.ttl=60
 //
-// The parameter key is a string with characters [a-zA-Z0-9_-] only, with a minimum of 1 character.
+// Sub-configurations are accessed via [XConfig.GetConfig]:
 //
-// The point (.) denotes a sub set of parameters (a new sub XConfig dataset for this parameter)
+//	db := xc.GetConfig("database")
+//	if db != nil {
+//	    host, _ := db.GetString("host")
+//	    port, _ := db.GetInt("port")
+//	}
 //
-//  database.user=username
-//  database.pass=password
-//  database.db=dbname
+// Dotted keys can also be set programmatically. [XConfig.Set] and [XConfig.Add]
+// accept dotted paths and create the necessary sub-XConfig hierarchy:
 //
-// In this case the database entry of the XConfig is again another XConfig with 3 parameters  into it: user, pass and db.
+//	xc.Set("database.host", "db.example.com")
+//	xc.Set("database.port", 5432)
 //
+// # Assignment operators
 //
-// 3. Assignation sign:
+// The three assignment operators control how a value combines with any existing
+// entry that already has the same key, both within a single file and across
+// multiple Load/Merge calls:
 //
-// A simple = sign is the normal assignation, the "add" or "replace" behaviour depends on the funcion called for loading the configuration (Load* or Merge* functions).
+//	=   default — behaviour depends on the Load* or Merge* function used:
+//	              Load* replaces existing entries; Merge* appends to them.
 //
-// In this case various asignation to the same parameter will create an array of values of the same type as the first declared parameter.
+//	:=  force-replace — always overwrites the current value, regardless of
+//	                    whether the caller used a Load* or Merge* function.
+//	                    When := appears later in the same file than a plain =
+//	                    for the same key, it replaces whatever was built up
+//	                    before it in that file.
 //
-// An equal sign preceded by a + (+=) will always add the parameter to the array of values, never replace it (see Merge/Load).
+//	+=  force-add — always appends to the current value, regardless of
+//	                whether the caller used a Load* or Merge* function.
+//	                Useful for unconditionally extending an array defined
+//	                in a base file.
 //
-// An equal sign preceded by a : (:=) will always replace the parameter and discard any already set values.
+// Examples of operator interactions:
 //
+//	# defaults.conf
+//	host=primary.example.com
+//	tag=stable
 //
-// 4. Parameter values:
+//	# local.conf  (loaded with MergeFile)
+//	host:=override.example.com   # replaces host even in merge mode
+//	tag+=canary                  # appends canary even in merge mode
+//	# result: host="override.example.com", tag=[]string{"stable","canary"}
 //
-// There are 4 types of values:
+// # Loading and merging
 //
-// - Strings
+// XConfig provides three families of source loaders, each with a Load variant
+// (replaces existing entries) and a Merge variant (appends to existing entries):
 //
-// - Integer
+//	Source      Load           Merge
+//	──────────  ─────────────  ──────────────
+//	File        LoadFile       MergeFile
+//	String      LoadString     MergeString
+//	*XConfig    LoadXConfig    MergeXConfig
 //
-// - Float
+// A common pattern for layered configuration (defaults, environment, local
+// overrides):
 //
-// - Boolean
+//	xc := xconfig.New()
+//	xc.LoadFile("config/defaults.conf")          // base values
+//	xc.MergeFile("config/production.conf")       // environment overrides
+//	xc.MergeFile("config/local.conf")            // developer-local tweaks
+//	// Missing files are silently ignored if you wrap with os.IsNotExist.
 //
-// The value has no restrictions except it must enter into the line (no line breaks allowed)
-// The compiler accepts strings "true", "on", "yes" as a boolean 'true' and "false", "off", "no", "none" as a boolean 'false'.
-// For instance, that means parameter=off is a boolean false, and parameter=yes is a boolean true in the XConfig structure.
+// When a Merge* call is made into a non-empty XConfig, the Multiple field is
+// set to true, indicating that the data originates from more than one source.
 //
-// The compiler also convert all integers to an int parameter in the XConfig structure, and float values as float64 type.
-// If you want a natural integer, float or boolean interpreted as a string, you must start it with a " character:
-// param1="123   will be the string 123 in the XConfig structure
+// # Getting values
 //
-// If you want a string starting with a ", you will need to put 2 " at the beginning:
-// param=""abc   will be the string "abc in the XConfig structure
+// The raw value stored for a key is retrieved with [XConfig.Get], which returns
+// (interface{}, bool). The concrete type of the interface is one of: string,
+// int, float64, bool, []string, []int, []float64, []bool, time.Time,
+// []time.Time, or *XConfig.
 //
-// 3. list of values:
+// Type-specific getters perform automatic cross-type conversions:
 //
-// You can repeat as many time you need the same parameter name with different values.
-// This will build a list of values in the object.
-// The list of values is kept as an array of values.
+//	Getter              Returns     Converts from
+//	──────────────────  ──────────  ───────────────────────────────────
+//	GetString(key)      string      any type via fmt.Sprint
+//	GetInt(key)         int         float64 (truncated), bool (0 or 1)
+//	GetFloat(key)       float64     int (widened), bool (0.0 or 1.0)
+//	GetBool(key)        bool        int (!=0), float64 (!=0)
+//	GetTime(key)        time.Time   no conversion; must be exact type
+//	GetConfig(key)      *XConfig    no conversion; must be exact type
+//	GetDataset(key)     XDatasetDef same as GetConfig
 //
-// If you have a mixed type of values, you will get an error.
+// Collection getters return typed slices and wrap single scalars in a
+// one-element slice, so callers can always range over the result:
 //
-// for instance:
+//	GetStringCollection(key)  →  []string
+//	GetIntCollection(key)     →  []int
+//	GetFloatCollection(key)   →  []float64
+//	GetBoolCollection(key)    →  []bool
+//	GetTimeCollection(key)    →  []time.Time
 //
-//  # Those are booleans
-//  parameter1=true
-//  parameter2=on
-//  parameter3=no
+// All getters return (zero-value, false) when the key does not exist.
 //
-//  # Those are integers
-//  parameter4=0
-//  parameter5=1
-//  parameter6=234
-//  parameter7=-5
-//  parameter8=837456783456
+// # Setting and deleting values
 //
-//  # Those are floats
-//  parameter10=0.0
-//  parameter11=1.7
-//  parameter12=234.5
-//  parameter13=-5.834
-//  parameter14=837456783.456
-//  parameter15=-5.834e7
+// [XConfig.Set] creates or replaces the entry for a key. It accepts string,
+// int, float64, and bool values, and supports dotted paths:
 //
-//  # Those are strings
-//  parameter20=asdh
-//  parameter21="1
-//  parameter22="false
-//  parameter23="-5.834
-//  parameter24=""12345
-//  parameter25=something 123 true false on off
+//	xc.Set("host", "localhost")
+//	xc.Set("port", 5432)
+//	xc.Set("tls", true)
+//	xc.Set("database.host", "db.example.com")   // dotted path
 //
-//  # This parameter will force parameter1 to become an array of booleans [true, false]
-//  parameter1=false
+// [XConfig.Add] appends a value to a key, building a slice on the first
+// repeated call. It accepts the same types as Set:
 //
-//  # This will throw an error since parameter1 is a boolean and abc is not a boolean
-//  parameter1=abc
+//	xc.Add("tag", "stable")
+//	xc.Add("tag", "v2")
+//	// tag is now []string{"stable", "v2"}
 //
-//  # Note that is the first parameter is a string, all new values will should start with " to be considered as a string also:
-//  parameter30=hello
-//  parameter30="true
-//  parameter30="123
-//  # you will obtain an array []string with values ["hello", "true", "123"]
+// [XConfig.Del] removes a key entirely, including from the insertion order
+// so that subsequent serialisation does not include it:
 //
-//  # List of authorized languages:
-//  languages=es
-//  languages=en
-//  languages=fr
-//  languages=jp
+//	xc.Del("temp")
 //
-// The order IS important.
+// # Serialisation
 //
-// Once loaded you will get a []string{“es”, “en”, “fr”, “jp”} assigned to the “languages” parameter.
+// [XConfig.Marshal] returns the full configuration as a string in the .conf
+// file format. It preserves comments, blank lines, and insertion order.
+// String values that would be misinterpreted on reload are automatically
+// protected with the " prefix, making the round-trip lossless:
 //
+//	xc.Set("label", "true")          // stored as string
+//	text := xc.Marshal()             // produces:  label="true
+//	xc2 := xconfig.New()
+//	xc2.LoadString(text)
+//	v, _ := xc2.GetString("label")   // "true"  ← string, not bool
 //
-// Merging vs Loading
+// [XConfig.SaveFile] writes the same output to a file with mode 0644.
 //
+// [XConfig.String] returns a compact, human-readable debug dump (not suitable
+// for reloading); its format is XConfig[\nkey:value\n...\n].
 //
-// + and :
+// # Cloning
 //
-// You may load two config file (or more), for example when you have a master config file and a local replacement values config file.
-// In this case, the values of the second file will "replace" the data already loaded with the first file. This is a replacement of config entries.
+// [XConfig.Clone] returns a fully independent deep copy of the XConfig. All
+// nested sub-configurations and all array slices are recursively cloned, so
+// modifications to the clone do not affect the original and vice versa:
 //
-// In the other hand, you may merge two config files (or more), for example when you need to fragment the data into a set of simpler files.
-// In this case, the values will just be "added" as if the two files were a simple file (create arrays on same id entries). This is a merging of config entries.
+//	snapshot := xc.Clone().(*xconfig.XConfig)
+//	snapshot.Set("env", "test")
+//	// xc is unchanged
 //
-// If you want to force the behaviour of variables (merging into a replacement loading, or replace into a merging loading), you may use the two
-// assignement operators + and :
+// # Thread safety
 //
-// := will be used to replace a value by a new value, meanwhile += will be used to add a new value to the array of data.
-// The rules of "same type of data" must be observed also in this case (+=)
+// All public methods are safe for concurrent use from multiple goroutines.
+// Read operations (Get*, Clone, Marshal, String) acquire a shared read lock.
+// Write operations (Load*, Merge*, Set, Add, Del, SaveFile) acquire an
+// exclusive write lock.
 //
-//  import "github.com/webability-go/xconfig"
+// The internal mutex is never held while sub-XConfig values are accessed
+// through the pointer returned by [XConfig.GetConfig]. If callers share a
+// sub-XConfig pointer across goroutines, they must provide their own
+// synchronisation for those accesses.
 //
-//  xc := xconfig.New()
-//  xc.LoadFile("/path/to/my/file.conf")
-//  xm := xconfig.New()
-//  xm.LoadFile("/path/to/my/file2.conf")
-//  // merge it:
-//  xc.Merge(xm)
+// # Path safety
 //
-// With the following files:
-//
-//  #file.conf: global config:
-//  ip=127.0.0.1
-//  port=80
-//  domain=test.com
-//
-//  #file2.conf: local config:
-//  port=8080
-//  title=Welcome
-//
-// The result config after merging local into global will be:
-//
-//  ip=127.0.0.1
-//  port=8080
-//  domain=test.com
-//  title=Welcome
-//
-// Advanced use
-//
-// The XConfig object is easily usable as:
-//
-//  // Using the New function
-//  config := xconfig.New(nil)
-//
-//  // Auto-new operator
-//  config := &xconfig.XConfig{}
-//
-//  // Default new operator
-//  config := new(xconfig.XConfig)
-//
-// or, if you load your own file by other means (remote, database etc)
-//
-//  config := &xconfig.XConfig{}
-//  mydata := getMyParameters()   // get the whole configuration file into mydata string
-//  config.LoadString(mydata)
-//
-// or, if you already have your configuration into a Map of Strings (unserialized, etc)
-//
-//  config := &xconfig.XConfig{}
-//  mydata := map[string]string{"param1":"value1","param2":"value2"}
-//  config.LoadXConfig(mydata)
-//
-// There are 3 sets of public functions:
-//
-// Load*: to load a file, a string dataset, or another XConfig dataset. Loading means all already existing parameters will be replaced by the new configuration.
-//
-// This is useful when you have a main config file, and a local config file that must replace some values
-// Functions are LoadFile, LoadString and LoadXConfig
-//
-// Merge*: to merge a file, a string dataset, or another XConfig dataset. Merging means all new entries will be added to the already existing parameters.
-//
-// This is userfull then you split your config file into subset of parameters each (for instance database config, memory config, internationalization config, etc)
-// Functions are MergeFile, MergeString and MergeXConfig
-//
-// Get/Set/Add: to read, set (replace) or add (merge) parameters to the XConfig.
-//
-// Once you have an instance of your configuration, you may use it like this:
-//
-//  // assign a local variable
-//  param1 := config.Get("parameter1")
-//  fmt.Println(param1)
-//
-//  // assign to an already casted local variable
-//  var param2 string
-//  param2 = config.Get("parameter2").(string)  // be careful that the parameter IS actually the same cast or an error is thrown
-//  fmt.Println(param2)
-//  // Or, since XConfig is XDataset extended, you may use the autocast functions:
-//  param2 = config.GetString("parameter2")  // Will be converted to a string always
-//
-//  // use directly the parameters
-//  for p, v := range config {
-//    fmt.Printf("%s=%v\n", p, v)
-//  }
-//
-//  // set a new parameter
-//  config.Set("parameter3", "value3")
-//  config.Set("parameter3", "new value3") // will be replaced
-//  config.Add("parameter3", "another value3") // will be replaced by an array of values with both entries into it
-//  config.Set("parameter4", 12345)
-//  config.Set("parameter5", true)
-//
-//
-//
-// Saving configuration
-//
-// After loading, creating, modifying your configuration file, you may need to save your configuration.
-//
-// For this yoy have 2 functions:
-//
-//
-//  config := &xconfig.XConfig{}
-//  config.Set("myparam1", "My value")
-//  // Create a string with the content of the new config:
-//  fmt.Println(config.Marshal())
-//
-//  // Directly save the modified config file:
-//  config.SaveFile("path/to/your/file.conf")
-//
-// Note: if you load your configuration file with comments in it, when you save it, the comments and presentation (new lines) will be respected.
-// If you add new parameters, they will be added to the end of the file. New lines will be removed into the definition of an array of data.
-//
-//
+// [XConfig.LoadFile], [XConfig.MergeFile], and [XConfig.SaveFile] reject
+// filenames that contain path-traversal sequences (..), returning an error
+// rather than reading or writing a file outside the intended directory tree.
 package xconfig
 
 import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"regexp"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -347,26 +325,32 @@ import (
 	"github.com/webability-go/xcore/v2"
 )
 
-// VERSION is the used version nombre of the XCore library.
-const VERSION = "0.4.3"
+// VERSION is the semantic version of the XConfig library.
+const VERSION = "0.5.0"
 
-// Parameter is the basic entry parameter into the configuration object
-// Value is the value of the parameter.
+// Parameter is an internal storage unit for a single configuration entry.
+//
+// It pairs a typed value with the type code inferred by the parser and the
+// assignment operator recorded from the source file. The type code determines
+// how subsequent Add or Merge operations combine this entry with new values.
+//
+// Type codes:
+//
+//	0  = unset (zero value; not yet assigned)
+//	1  = string       11 = []string
+//	2  = int          12 = []int
+//	3  = float64      13 = []float64
+//	4  = bool         14 = []bool
+//	21 = *XConfig (nested sub-configuration)
+//
+// Assignment codes:
+//
+//	0  = default (follows the Load*/Merge* call semantics)
+//	1  = force-replace (:= operator — always overwrites)
+//	2  = force-add     (+= operator — always appends)
 type Parameter struct {
-	// type =
-	//  0: not set yet
-	//  1: string, 11 = array of string
-	//  2: integer, 12 = array of int
-	//  3: float64, 13 = array of float64
-	//  4: bool, 14 = array of boolean
-	// 21: sub XConfig
-	paramtype int
-	// Value of the parameter ()
-	Value interface{}
-	// assignment =
-	//  0: default behaviour
-	//  1: forced :=
-	//  2: forced +=
+	paramtype  int
+	Value      interface{}
 	assignment int
 }
 
@@ -380,56 +364,66 @@ func (p *Parameter) set(paramtype int, value interface{}, assignment int) {
 	p.assignment = assignment
 }
 
+// add merges a new value into the parameter, promoting scalars to slices when
+// the same key appears more than once.
+//
+// When a scalar (type 1–4) receives a second value of the same scalar type,
+// both values are combined into a two-element slice (type 11–14), with the
+// existing value first so that insertion order is preserved.
+//
+// When a scalar receives a slice of the same element type, the existing scalar
+// is prepended to the incoming slice.
+//
+// When a slice (type 11–14) receives a compatible value, the new element or
+// elements are appended to the end of the slice.
+//
+// Passing incompatible types (e.g. adding a bool to an int parameter) returns
+// a descriptive error; no mutation occurs.
+//
+// Sub-XConfig entries (type 21) are recursively merged rather than replaced.
 func (p *Parameter) add(paramtype int, value interface{}, assignment int) error {
 	switch p.paramtype {
-	case 0: // not set yet
+	case 0: // not set yet — first assignment
 		p.paramtype = paramtype
 		p.Value = value
 	case 1: // string
 		if paramtype == 1 {
-			// transform the parameter into an array and change paramtype
 			sub := make([]string, 0, 2)
 			p.Value = append(sub, p.Value.(string), value.(string))
 			p.paramtype = 11
 		} else if paramtype == 11 {
-			// concatenate array of string
-			p.Value = append(value.([]string), p.Value.(string))
+			// Existing scalar goes first to maintain chronological order.
+			p.Value = append([]string{p.Value.(string)}, value.([]string)...)
 		} else {
 			return errors.New("The parameter cannot add an incompatible value to a string")
 		}
 	case 2: // integer
 		if paramtype == 2 {
-			// transform the parameter into an array and change paramtype
 			sub := make([]int, 0, 2)
 			p.Value = append(sub, p.Value.(int), value.(int))
 			p.paramtype = 12
 		} else if paramtype == 12 {
-			// concatenate array of int
-			p.Value = append(value.([]int), p.Value.(int))
+			p.Value = append([]int{p.Value.(int)}, value.([]int)...)
 		} else {
 			return errors.New("The parameter cannot add an incompatible value to an integer")
 		}
 	case 3: // float64
 		if paramtype == 3 {
-			// transform the parameter into an array and change paramtype
 			sub := make([]float64, 0, 2)
 			p.Value = append(sub, p.Value.(float64), value.(float64))
 			p.paramtype = 13
 		} else if paramtype == 13 {
-			// concatenate array of float64
-			p.Value = append(value.([]float64), p.Value.(float64))
+			p.Value = append([]float64{p.Value.(float64)}, value.([]float64)...)
 		} else {
 			return errors.New("The parameter cannot add an incompatible value to a float")
 		}
 	case 4: // boolean
 		if paramtype == 4 {
-			// transform the parameter into an array and change paramtype
 			sub := make([]bool, 0, 2)
 			p.Value = append(sub, p.Value.(bool), value.(bool))
 			p.paramtype = 14
 		} else if paramtype == 14 {
-			// concatenate array of bool
-			p.Value = append(value.([]bool), p.Value.(bool))
+			p.Value = append([]bool{p.Value.(bool)}, value.([]bool)...)
 		} else {
 			return errors.New("The parameter cannot add an incompatible value to a boolean")
 		}
@@ -437,7 +431,6 @@ func (p *Parameter) add(paramtype int, value interface{}, assignment int) error 
 		if paramtype == 1 {
 			p.Value = append(p.Value.([]string), value.(string))
 		} else if paramtype == 11 {
-			// concatenate array of string
 			p.Value = append(p.Value.([]string), value.([]string)...)
 		} else {
 			return errors.New("The parameter cannot add an incompatible value to an array of strings")
@@ -446,7 +439,6 @@ func (p *Parameter) add(paramtype int, value interface{}, assignment int) error 
 		if paramtype == 2 {
 			p.Value = append(p.Value.([]int), value.(int))
 		} else if paramtype == 12 {
-			// concatenate array of int
 			p.Value = append(p.Value.([]int), value.([]int)...)
 		} else {
 			return errors.New("The parameter cannot add an incompatible value to an array of integers")
@@ -455,66 +447,162 @@ func (p *Parameter) add(paramtype int, value interface{}, assignment int) error 
 		if paramtype == 3 {
 			p.Value = append(p.Value.([]float64), value.(float64))
 		} else if paramtype == 13 {
-			// concatenate array of float64
 			p.Value = append(p.Value.([]float64), value.([]float64)...)
 		} else {
-			return errors.New("The parameter cannot add an incompatible value to an array of integers")
+			return errors.New("The parameter cannot add an incompatible value to an array of floats")
 		}
-	case 14: // array of float64
+	case 14: // array of bool
 		if paramtype == 4 {
 			p.Value = append(p.Value.([]bool), value.(bool))
 		} else if paramtype == 14 {
-			// concatenate array of bool
 			p.Value = append(p.Value.([]bool), value.([]bool)...)
 		} else {
 			return errors.New("The parameter cannot add an incompatible value to an array of booleans")
 		}
-	case 21: // XConfig
-		// pass the addparam to the subset XConfig
+	case 21: // nested sub-XConfig — merge recursively rather than replacing
+		if paramtype == 21 {
+			existingSub := p.Value.(*XConfig)
+			newSub := value.(*XConfig)
+			existingSub.parsemap(newSub, true)
+		}
 	default:
-		return errors.New("Unknow parameter type")
+		return errors.New("Unknown parameter type")
 	}
 	return nil
 }
 
-// Clone is the parameter method to call to make a full clone of the information
+// Clone returns a fully independent deep copy of the Parameter.
+//
+// Slice backing arrays ([]string, []int, []float64, []bool) are copied into
+// freshly allocated slices so that the original and the clone never share
+// underlying storage. Nested *XConfig values are cloned recursively via their
+// own Clone method.
 func (p *Parameter) Clone() *Parameter {
 	cloned := newParam()
-	clonedval := p.Value
-	if cloneable, ok := clonedval.(interface{ Clone() xcore.XDatasetDef }); ok {
-		clonedval = cloneable.Clone()
+	var clonedval interface{}
+
+	switch v := p.Value.(type) {
+	case []string:
+		dst := make([]string, len(v))
+		copy(dst, v)
+		clonedval = dst
+	case []int:
+		dst := make([]int, len(v))
+		copy(dst, v)
+		clonedval = dst
+	case []float64:
+		dst := make([]float64, len(v))
+		copy(dst, v)
+		clonedval = dst
+	case []bool:
+		dst := make([]bool, len(v))
+		copy(dst, v)
+		clonedval = dst
+	default:
+		clonedval = p.Value
+		if cloneable, ok := clonedval.(interface{ Clone() xcore.XDatasetDef }); ok {
+			clonedval = cloneable.Clone()
+		}
 	}
 	cloned.set(p.paramtype, clonedval, p.assignment)
 	return cloned
 }
 
-// XConfigDef is the config definition type
+// XConfigDef is the interface satisfied by XConfig. It extends
+// xcore.XDatasetDef with no additional methods, providing a named type alias
+// that callers can use to accept any XConfig-compatible value.
 type XConfigDef interface {
 	xcore.XDatasetDef
 }
 
-// XConfig is the main config object
+// XConfig is a thread-safe, ordered key-value configuration store.
+//
+// Parameters maps each key to its typed Parameter value.
+// Comments maps sentinel keys of the form "#<n>" to the corresponding comment
+// or blank line text, preserving them across serialisation round-trips.
+// Order records the insertion sequence of both parameters and comments, which
+// is reproduced faithfully by Marshal and SaveFile.
+// Multiple is set to true the first time a second source is merged into this
+// config, indicating that the data originates from more than one file or string.
+//
+// An XConfig must be created via New; a zero value is not ready for use.
 type XConfig struct {
-	Parameters  map[string]Parameter
-	Comments    map[string]string
-	Order       []string
-	Multiple    bool
-	multithread bool
-	mutex       sync.RWMutex
+	Parameters map[string]Parameter
+	Comments   map[string]string
+	Order      []string
+	Multiple   bool
+	mutex      sync.RWMutex
 }
 
-// New is called to create a new empty XConfig object
+// New creates and returns an empty XConfig ready for use.
+//
+//	xc := xconfig.New()
+//	xc.Set("host", "localhost")
+//	xc.Set("port", 5432)
 func New() *XConfig {
-	c := &XConfig{
+	return &XConfig{
 		Parameters: make(map[string]Parameter),
 		Comments:   make(map[string]string),
 		Multiple:   false,
 	}
-	return c
 }
 
-// ========================
-//  The private functions used to control the XConfig structre and load strings and files
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+// validatePath rejects filenames that contain path-traversal sequences (..),
+// preventing callers from accidentally reading or writing files outside the
+// intended directory tree. An empty filename is accepted and treated as a
+// no-op by the callers that invoke this helper.
+func validatePath(filename string) error {
+	if filename == "" {
+		return nil
+	}
+	cleaned := filepath.Clean(filename)
+	for _, part := range strings.Split(filepath.ToSlash(cleaned), "/") {
+		if part == ".." {
+			return fmt.Errorf("xconfig: path traversal detected in filename %q", filename)
+		}
+	}
+	return nil
+}
+
+// isValidKeyPart reports whether s is a non-empty string that does not contain
+// the '=' character. It is used to distinguish a := or += operator that
+// appears in the key position from a literal occurrence of those character
+// sequences inside a value string (e.g. a URL containing ":=").
+func isValidKeyPart(s string) bool {
+	return len(s) > 0 && !strings.Contains(s, "=")
+}
+
+// needsQuotePrefix reports whether value would be misinterpreted on reload —
+// that is, whether the parser would infer a type other than string for it.
+// When this function returns true, Marshal and SaveFile prepend a '"' character
+// so that a subsequent LoadFile or LoadString call restores the original string
+// type without data loss.
+//
+// The following values require protection: the boolean keywords (yes/true/on,
+// no/none/false/off), bare integers, bare floats, and strings that already
+// begin with a double-quote character.
+func needsQuotePrefix(s string) bool {
+	lower := strings.ToLower(s)
+	switch lower {
+	case "yes", "true", "on", "no", "none", "false", "off":
+		return true
+	}
+	if _, err := strconv.Atoi(s); err == nil {
+		return true
+	}
+	if _, err := strconv.ParseFloat(s, 64); err == nil {
+		return true
+	}
+	// A string whose first character is '"' would lose that character if it
+	// were written unprotected, because the parser strips a leading '"'.
+	if len(s) > 0 && s[0] == '"' {
+		return true
+	}
+	return false
+}
+
 func (c *XConfig) addcomment(line int, comment string) error {
 	id := "#" + strconv.Itoa(line)
 	c.Comments[id] = comment
@@ -523,61 +611,78 @@ func (c *XConfig) addcomment(line int, comment string) error {
 }
 
 func (c *XConfig) addparam(line int, key string, typeparam int, value interface{}, assignment int) error {
-	// check if key contains "+" (forced array) and . (subset of config)
-	// and creates a Map[] if the value already exists (or just set it)
-	//  keydata, merge := analyzeKey(key)
-	//  mustmerge := false
 	pospoint := strings.Index(key, ".")
 	if pospoint >= 0 {
 		firstkey := strings.TrimSpace(key[:pospoint])
 		subkey := strings.TrimSpace(key[pospoint+1:])
 
 		if val, ok := c.Parameters[firstkey]; ok {
-			// already exists: add the sub parameters, val is an *XConfig
 			val.Value.(*XConfig).addparam(line, subkey, typeparam, value, assignment)
 		} else {
-			// no existe
 			p := newParam()
-			err := p.add(21, New(), assignment)
-			if err != nil {
+			if err := p.add(21, New(), assignment); err != nil {
 				return err
 			}
 			p.Value.(*XConfig).addparam(line, subkey, typeparam, value, assignment)
 			c.Parameters[firstkey] = *p
 			c.Order = append(c.Order, firstkey)
 		}
-	} else {
-		if val, ok := c.Parameters[key]; ok {
-			p := newParam()
-			err := p.add(val.paramtype, val.Value, assignment)
-			if err != nil {
-				return err
-			}
-			err = p.add(typeparam, value, assignment)
-			if err != nil {
-				return err
-			}
-			c.Parameters[key] = *p
-		} else {
-			p := newParam()
-			err := p.add(typeparam, value, assignment)
-			if err != nil {
-				return err
-			}
-			c.Parameters[key] = *p
-			c.Order = append(c.Order, key)
+		return nil
+	}
+
+	if val, ok := c.Parameters[key]; ok {
+		p := newParam()
+		if err := p.add(val.paramtype, val.Value, assignment); err != nil {
+			return err
 		}
+		if err := p.add(typeparam, value, assignment); err != nil {
+			return err
+		}
+		p.assignment = assignment // preserve operator code for parsemap routing
+		c.Parameters[key] = *p
+	} else {
+		p := newParam()
+		if err := p.add(typeparam, value, assignment); err != nil {
+			return err
+		}
+		p.assignment = assignment // preserve operator code for parsemap routing
+		c.Parameters[key] = *p
+		c.Order = append(c.Order, key)
 	}
 	return nil
 }
 
+// setparam replaces (or creates) the entry for key with the given typed value.
+// When key contains a dot, the first segment names a sub-XConfig and the
+// remainder is resolved recursively, creating intermediate sub-configs as
+// needed. This allows callers such as Set("db.host", "localhost") to build the
+// correct nested hierarchy instead of creating a literal "db.host" flat entry.
 func (c *XConfig) setparam(line int, key string, typeparam int, value interface{}, assignment int) error {
-	// check if key contains "+" (forced array) and . (subset of config)
-	// and creates a Map[] if the value already exists (or just set it)
-	//  keydata, merge := analyzeKey(key)
-	//  mustmerge := false
+	pospoint := strings.Index(key, ".")
+	if pospoint >= 0 {
+		firstkey := strings.TrimSpace(key[:pospoint])
+		subkey := strings.TrimSpace(key[pospoint+1:])
+
+		if val, ok := c.Parameters[firstkey]; ok {
+			return val.Value.(*XConfig).setparam(line, subkey, typeparam, value, assignment)
+		}
+		p := newParam()
+		if err := p.add(21, New(), 0); err != nil {
+			return err
+		}
+		if err := p.Value.(*XConfig).setparam(line, subkey, typeparam, value, assignment); err != nil {
+			return err
+		}
+		c.Parameters[firstkey] = *p
+		c.Order = append(c.Order, firstkey)
+		return nil
+	}
+
 	p := newParam()
-	p.add(typeparam, value, assignment)
+	if err := p.add(typeparam, value, assignment); err != nil {
+		return err
+	}
+	p.assignment = assignment // preserve operator code for parsemap routing
 	if _, ok := c.Parameters[key]; !ok {
 		c.Order = append(c.Order, key)
 	}
@@ -585,31 +690,56 @@ func (c *XConfig) setparam(line int, key string, typeparam int, value interface{
 	return nil
 }
 
+// parseline parses a single line from a configuration file or string into
+// tempConfig, applying type inference and operator detection.
+//
+// The := and += operators are detected before the plain = sign is searched for,
+// so that key names are never corrupted. For example, "host:=db.example.com"
+// correctly yields key="host", assignment=1 (force-replace), value="db.example.com".
+// A sequence such as "url=http://host:=path" has the operator inside the value
+// portion and is treated as a normal string assignment.
 func (c *XConfig) parseline(line int, data string, merge bool) error {
-
-	posequal := strings.Index(data, "=")
-
-	// we ignore empty and comments lines, no key=value lines too
-	if len(data) == 0 || data[0] == '#' || data[0] == ';' || posequal < 0 {
+	// Empty lines and comment lines are stored verbatim in the Comments map.
+	if len(data) == 0 || data[0] == '#' || data[0] == ';' {
 		return c.addcomment(line, data)
 	}
 
-	// we separate the key. if there is no key, we ignore the data
-	key := strings.TrimSpace(data[:posequal])
+	// Detect := and += before searching for plain =, so the operator
+	// characters are not included in the key or value.
+	assignment := 0
+	parsedata := data // operate on a copy; keep the original for comment fallback
+
+	if idx := strings.Index(parsedata, ":="); idx > 0 {
+		potKey := strings.TrimSpace(parsedata[:idx])
+		if isValidKeyPart(potKey) {
+			assignment = 1                                  // force replace
+			parsedata = parsedata[:idx] + parsedata[idx+1:] // remove ':', keep '='
+		}
+	} else if idx := strings.Index(parsedata, "+="); idx > 0 {
+		potKey := strings.TrimSpace(parsedata[:idx])
+		if isValidKeyPart(potKey) {
+			assignment = 2                                  // force add
+			parsedata = parsedata[:idx] + parsedata[idx+1:] // remove '+', keep '='
+		}
+	}
+
+	posequal := strings.Index(parsedata, "=")
+	if posequal < 0 {
+		return c.addcomment(line, data) // no '=' found → treat as comment
+	}
+
+	key := strings.TrimSpace(parsedata[:posequal])
 	if len(key) == 0 {
 		return c.addcomment(line, data)
 	}
 
-	// analyse si := or +=
-	assignment := 0
-
-	// we capture the value if it exists. If not, the key entry is initialized with a nil value
 	var value interface{}
 	var typeparam = 1
-	if len(data) > posequal {
-		strvalue := strings.TrimSpace(data[posequal+1:])
+	if len(parsedata) > posequal {
+		strvalue := strings.TrimSpace(parsedata[posequal+1:])
 		value = strvalue
 		if len(strvalue) > 0 && strvalue[0] == '"' {
+			// Leading '"' forces string interpretation; strip the prefix.
 			value = strvalue[1:]
 		} else {
 			if strvalue == "yes" || strvalue == "true" || strvalue == "on" {
@@ -622,30 +752,61 @@ func (c *XConfig) parseline(line int, data string, merge bool) error {
 				if intvalue, err := strconv.Atoi(strvalue); err == nil {
 					value = intvalue
 					typeparam = 2
-				} else {
-					if floatvalue, err := strconv.ParseFloat(strvalue, 64); err == nil {
-						value = floatvalue
-						typeparam = 3
-					}
+				} else if floatvalue, err := strconv.ParseFloat(strvalue, 64); err == nil {
+					value = floatvalue
+					typeparam = 3
 				}
 			}
 		}
 	}
+	// := (force-replace) must call setparam so that a later entry in the same
+	// file/string overwrites any earlier value accumulated in tempConfig.
+	// += (force-add) and plain = both accumulate via addparam.
+	if assignment == 1 {
+		return c.setparam(line, key, typeparam, value, assignment)
+	}
 	return c.addparam(line, key, typeparam, value, assignment)
 }
 
+// parsemap integrates all entries from data into c.
+//
+// When c is empty (first load), every Parameter is deep-cloned via
+// Parameter.Clone before insertion, preventing the original and the new config
+// from sharing slice backing arrays or sub-XConfig pointers.
+//
+// When c already contains entries (subsequent load or merge), each parameter
+// from data is routed through either setparam (replace semantics) or addparam
+// (append semantics). The routing respects per-entry assignment operators (:=
+// and +=) that were recorded during parsing, overriding the global merge flag
+// where necessary.
 func (c *XConfig) parsemap(data *XConfig, merge bool) error {
 	if len(c.Parameters) == 0 {
-		c.Parameters = data.Parameters
-		c.Comments = data.Comments
-		c.Order = data.Order
+		// Deep-clone every parameter to avoid aliasing.
+		c.Parameters = make(map[string]Parameter, len(data.Parameters))
+		for k, v := range data.Parameters {
+			c.Parameters[k] = *(&v).Clone()
+		}
+		c.Comments = make(map[string]string, len(data.Comments))
+		for k, v := range data.Comments {
+			c.Comments[k] = v
+		}
+		c.Order = make([]string, len(data.Order))
+		copy(c.Order, data.Order)
 	} else {
 		line := len(c.Order)
-		for p, v := range (*data).Parameters {
-			if merge {
-				c.addparam(line, p, v.paramtype, v.Value, v.assignment)
-			} else {
+		for p, v := range data.Parameters {
+			// Per-entry operators override the global merge flag.
+			switch v.assignment {
+			case 1: // := — force replace regardless of merge mode
 				c.setparam(line, p, v.paramtype, v.Value, v.assignment)
+			case 2: // += — force add regardless of merge mode
+				c.addparam(line, p, v.paramtype, v.Value, v.assignment)
+			default:
+				if merge {
+					c.addparam(line, p, v.paramtype, v.Value, v.assignment)
+				} else {
+					c.setparam(line, p, v.paramtype, v.Value, v.assignment)
+				}
 			}
 		}
 		c.Multiple = true
@@ -653,10 +814,15 @@ func (c *XConfig) parsemap(data *XConfig, merge bool) error {
 	return nil
 }
 
+// loadandparse opens filename, reads it line by line, and integrates its
+// entries into c according to merge. Path traversal is rejected before the
+// file is opened.
 func (c *XConfig) loadandparse(filename string, merge bool) error {
-	// No filename: we let the config object as is
 	if len(filename) == 0 {
 		return nil
+	}
+	if err := validatePath(filename); err != nil {
+		return err
 	}
 	file, err := os.Open(filename)
 	if err != nil {
@@ -669,54 +835,64 @@ func (c *XConfig) loadandparse(filename string, merge bool) error {
 	ln := 1
 	for scanner.Scan() {
 		line := scanner.Text()
-		err := tempConfig.parseline(ln, line, merge)
-		if err != nil {
+		if err := tempConfig.parseline(ln, line, merge); err != nil {
 			return err
 		}
 		ln++
 	}
-
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-
-	// We need a temporal xconfig and inject at the end because of the merge flag and the + and * flags (hard to change on the fly based on the existante of the old variable vs new variable)
 	c.parsemap(tempConfig, merge)
 	return nil
 }
 
 func (c *XConfig) parsestring(data string, merge bool) error {
-	// No filename: we let the config object as is
 	if len(data) == 0 {
 		return nil
 	}
-
 	tempConfig := New()
 	scanner := bufio.NewScanner(strings.NewReader(data))
-	line := 0
+	line := 1
 	for scanner.Scan() {
-		data := scanner.Text()
-		err := tempConfig.parseline(line, data, merge)
-		if err != nil {
+		row := scanner.Text()
+		if err := tempConfig.parseline(line, row, merge); err != nil {
 			return err
 		}
 		line++
 	}
-
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-
-	//  fmt.Println(tempConfig)
-
 	c.parsemap(tempConfig, merge)
 	return nil
 }
 
-// String will create a string of the ordered content of the XConfig
+// ── String representation ─────────────────────────────────────────────────────
+
+// String returns a human-readable ordered summary of the XConfig contents.
+// Comments and blank lines are included verbatim; parameter entries are
+// rendered as "key:value". This output is intended for debugging and logging;
+// use Marshal or SaveFile to produce a configuration text that can be reloaded.
+//
+//	xc := xconfig.New()
+//	xc.Set("host", "localhost")
+//	xc.Set("port", 5432)
+//	fmt.Print(xc)
+//	// Output:
+//	// XConfig[
+//	// host:localhost
+//	// port:5432
+//	// ]
 func (c *XConfig) String() string {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
 	sdata := []string{}
 	for _, val := range c.Order {
+		if len(val) == 0 {
+			continue // guard against empty sentinel keys
+		}
 		if val[0] == '#' {
 			sdata = append(sdata, c.Comments[val])
 		} else {
@@ -726,15 +902,39 @@ func (c *XConfig) String() string {
 	return "XConfig[\n" + strings.Join(sdata, "\n") + "\n]\n"
 }
 
-// GoString will create a string of the ordered content of the XConfig (based on String)
+// GoString returns the same content as String, prefixed with "#". It is
+// invoked by the %#v formatting verb and by Go's default struct printer.
 func (c *XConfig) GoString() string {
 	return "#" + c.String()
 }
 
-// Set will replace or create the value of the key entry
+// ── Public API — write operations ────────────────────────────────────────────
+
+// Set creates or replaces the entry for key with value.
+//
+// Accepted value types are string, int, float64, and bool. Values of any
+// other type are stored with type code 0 and serialised via fmt.Sprint.
+//
+// Dotted key paths create or update nested sub-configurations:
+//
+//	xc.Set("host", "db.example.com")
+//	xc.Set("port", 5432)
+//	xc.Set("tls", true)
+//	xc.Set("timeout", 30.5)
+//
+//	// Dotted path — creates or updates a "database" sub-config:
+//	xc.Set("database.host", "db.example.com")
+//	xc.Set("database.port", 5432)
+//
+//	db := xc.GetConfig("database")
+//	// db.GetString("host") → "db.example.com"
+//	// db.GetInt("port")    → 5432
+//
+// Set is a no-op when key is the empty string.
 func (c *XConfig) Set(key string, value interface{}) {
-	// check if key contains "+" (forced array) and . (subset of config)
-	// and just replace the value
+	if len(key) == 0 {
+		return // empty keys are silently ignored
+	}
 	var valuetype int
 	switch value.(type) {
 	case string:
@@ -746,13 +946,35 @@ func (c *XConfig) Set(key string, value interface{}) {
 	case bool:
 		valuetype = 4
 	}
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	c.setparam(0, key, valuetype, value, 1)
 }
 
-// Add will adds a value to the structure. If the key entry already exists, then try to build a collection of it
+// Add appends value to the entry for key, building a typed slice when the key
+// already holds a scalar value of the same type.
+//
+// Accepted value types are string, int, float64, and bool. Passing a value of
+// any other type returns an error. Appending a value whose type is incompatible
+// with the existing entry (e.g. adding a bool to an int key) also returns an
+// error; the configuration is not modified in that case.
+//
+//	xc.Add("country", "MX")
+//	xc.Add("country", "US")
+//	xc.Add("country", "FR")
+//	countries, _ := xc.GetStringCollection("country")
+//	// countries == []string{"MX", "US", "FR"}
+//
+//	xc.Add("port", 8080)
+//	xc.Add("port", 8081)
+//	ports, _ := xc.GetIntCollection("port")
+//	// ports == []int{8080, 8081}
+//
+// Add returns a non-nil error when key is the empty string.
 func (c *XConfig) Add(key string, value interface{}) error {
-	// check if key contains "+" (forced array) and . (subset of config)
-	// and creates a Map[] if the value already exists (or just set it)
+	if len(key) == 0 {
+		return errors.New("xconfig: key must not be empty")
+	}
 	var valuetype int
 	switch value.(type) {
 	case string:
@@ -764,73 +986,142 @@ func (c *XConfig) Add(key string, value interface{}) error {
 	case bool:
 		valuetype = 4
 	default:
-		return errors.New("The XConfig.Add function only accept string, integer, float64 and boolean values")
+		return errors.New("The XConfig.Add function only accepts string, integer, float64 and boolean values")
 	}
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	return c.addparam(0, key, valuetype, value, 0)
 }
 
-// Get will return the value of the key entry
-// return false as second parameter if the entry does not exists (remember a value can be NIL and exists)
+// Del removes the entry for key from the configuration. If the key does not
+// exist, Del is a no-op. The key is removed from Parameters, Comments, and
+// Order, so subsequent calls to Marshal, SaveFile, String, and iteration via
+// Order will not include it.
+//
+//	xc.Set("temp", "scratch")
+//	xc.Del("temp")
+//	_, exists := xc.Get("temp")  // exists == false
+func (c *XConfig) Del(key string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	delete(c.Parameters, key)
+	delete(c.Comments, key)
+
+	// Build a new slice instead of modifying Order in-place during iteration.
+	newOrder := c.Order[:0]
+	for _, v := range c.Order {
+		if v != key {
+			newOrder = append(newOrder, v)
+		}
+	}
+	c.Order = newOrder
+}
+
+// ── Public API — read operations ─────────────────────────────────────────────
+
+// Get returns the raw value stored under key and a boolean indicating whether
+// the key was found. The concrete type of the returned interface{} is one of:
+// string, int, float64, bool, []string, []int, []float64, []bool, or *XConfig.
+//
+// Returns (nil, false) when the key does not exist.
+//
+//	if v, ok := xc.Get("port"); ok {
+//	    fmt.Println(v)        // e.g. 5432 (int)
+//	    fmt.Printf("%T\n", v) // "int"
+//	}
 func (c *XConfig) Get(key string) (interface{}, bool) {
-	// check if key contains "." (subset of config)
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
 		return val.Value, true
 	}
 	return nil, false
 }
 
-// GetDataset will return the key entry data as an XDataset if it exists and is a XDatasetDef
-// return false as second parameter if the entry does not exists (remember a value can be NIL and exists)
+// GetDataset returns the value of key as an xcore.XDatasetDef. Only nested
+// sub-XConfig entries satisfy this interface. Returns (nil, false) when the
+// key does not exist or holds a scalar value.
+//
+//	// Config file:
+//	//   database.host=localhost
+//	//   database.port=5432
+//
+//	if ds, ok := xc.GetDataset("database"); ok {
+//	    // ds implements xcore.XDatasetDef and can be passed to xcore templates.
+//	    host, _ := ds.GetString("host")  // "localhost"
+//	}
 func (c *XConfig) GetDataset(key string) (xcore.XDatasetDef, bool) {
-	// check if key contains "." (subset of config)
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
-		case *XConfig:
-			return val.Value.(*XConfig), true
+		if xc, ok := val.Value.(*XConfig); ok {
+			return xc, true
 		}
 	}
 	return nil, false
 }
 
-// GetCollection will return the key entry data as an XDatasetCollectionDef if it exists and is a XDatasetCollectionDef
-// return false as second parameter if the entry does not exists (remember a value can be NIL and exists)
+// GetCollection returns the value of key as an xcore.XDatasetCollectionDef.
+// Returns (nil, false) when the key does not exist or its value does not
+// implement that interface.
 func (c *XConfig) GetCollection(key string) (xcore.XDatasetCollectionDef, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
-		case xcore.XDatasetCollectionDef:
-			return val.Value.(xcore.XDatasetCollectionDef), true
+		if col, ok := val.Value.(xcore.XDatasetCollectionDef); ok {
+			return col, true
 		}
 	}
 	return nil, false
 }
 
-// GetString will return the key entry data as a string, or ""
-// return false as second parameter if the entry does not exists (remember a value can be "" and exists)
+// GetString returns the value of key as a string. If the stored value is not
+// already a string, it is converted with fmt.Sprint. Returns ("", false) when
+// the key does not exist.
+//
+//	xc.Set("version", "2.3.1")
+//	ver, ok := xc.GetString("version")   // "2.3.1", true
+//
+//	xc.Set("port", 8080)
+//	port, ok := xc.GetString("port")     // "8080", true (int → string)
 func (c *XConfig) GetString(key string) (string, bool) {
-	// check if key contains "." (subset of config)
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
+		switch v := val.Value.(type) {
 		case string:
-			return val.Value.(string), true
+			return v, true
 		default:
-			return fmt.Sprint(val.Value), true
+			return fmt.Sprint(v), true
 		}
 	}
 	return "", false
 }
 
-// GetInt will return the key entry data as an int, or 0
-// return false as second parameter if the entry does not exists (remember a value can be 0 and exists)
+// GetInt returns the value of key as an int. Float64 values are truncated
+// toward zero; bool values are converted to 1 (true) or 0 (false). Returns
+// (0, false) when the key does not exist or the value cannot be converted.
+//
+//	xc.Set("workers", 4)
+//	n, ok := xc.GetInt("workers")   // 4, true
+//
+//	xc.Set("ratio", 1.9)
+//	r, ok := xc.GetInt("ratio")     // 1, true (float64 truncated toward zero)
+//
+//	xc.Set("enabled", true)
+//	e, ok := xc.GetInt("enabled")   // 1, true (bool → int)
 func (c *XConfig) GetInt(key string) (int, bool) {
-	// check if key contains "." (subset of config)
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
+		switch v := val.Value.(type) {
 		case int:
-			return val.Value.(int), true
+			return v, true
 		case float64:
-			return int(val.Value.(float64)), true
+			return int(v), true
 		case bool:
-			if val.Value.(bool) {
+			if v {
 				return 1, true
 			}
 			return 0, true
@@ -839,18 +1130,27 @@ func (c *XConfig) GetInt(key string) (int, bool) {
 	return 0, false
 }
 
-// GetFloat will return the key entry data as a float64, or 0
-// return false as second parameter if the entry does not exists (remember a value can be 0 and exists)
+// GetFloat returns the value of key as a float64. Int values are widened
+// without loss; bool values are converted to 1.0 (true) or 0.0 (false).
+// Returns (0, false) when the key does not exist or the value cannot be
+// converted.
+//
+//	xc.Set("ratio", 3.14)
+//	r, ok := xc.GetFloat("ratio")   // 3.14, true
+//
+//	xc.Set("count", 7)
+//	n, ok := xc.GetFloat("count")   // 7.0,  true (int widened)
 func (c *XConfig) GetFloat(key string) (float64, bool) {
-	// check if key contains "." (subset of config)
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
+		switch v := val.Value.(type) {
 		case float64:
-			return val.Value.(float64), true
+			return v, true
 		case int:
-			return float64(val.Value.(int)), true
+			return float64(v), true
 		case bool:
-			if val.Value.(bool) {
+			if v {
 				return 1.0, true
 			}
 			return 0.0, true
@@ -859,120 +1159,187 @@ func (c *XConfig) GetFloat(key string) (float64, bool) {
 	return 0, false
 }
 
-// GetTime will return the key entry data as a time, or 0
-// return false as second parameter if the entry does not exists (remember a value can be 0 and exists)
-func (c *XConfig) GetTime(key string) (time.Time, bool) {
-	// check if key contains "." (subset of config)
-	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
-		case time.Time:
-			return val.Value.(time.Time), true
-		}
-	}
-	return time.Time{}, false
-}
-
-// GetBool will return the key entry data as a boolean, or false
-// return false as second parameter if the entry does not exists (remember a value can be false and exists)
+// GetBool returns the value of key as a bool. Non-zero int and float64 values
+// are true; zero values are false. Returns (false, false) when the key does
+// not exist or the value cannot be converted.
+//
+//	xc.Set("debug", true)
+//	d, ok := xc.GetBool("debug")    // true,  true
+//
+//	xc.Set("retries", 0)
+//	r, ok := xc.GetBool("retries")  // false, true (zero int → false)
+//
+//	xc.Set("factor", 2.5)
+//	f, ok := xc.GetBool("factor")   // true,  true (non-zero float → true)
 func (c *XConfig) GetBool(key string) (bool, bool) {
-	// check if key contains "." (subset of config)
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
+		switch v := val.Value.(type) {
 		case bool:
-			return val.Value.(bool), true
+			return v, true
 		case int:
-			return val.Value.(int) != 0, true
+			return v != 0, true
 		case float64:
-			return val.Value.(float64) != 0, true
+			return v != 0, true
 		}
 	}
 	return false, false
 }
 
-// GetStringCollection will return the key entry data as a []string, or nil
-// return false as second parameter if the entry does not exists (remember a value can be nil and exists)
+// GetTime returns the value of key as a time.Time. Returns (time.Time{}, false)
+// when the key does not exist or its value is not a time.Time.
+//
+// Note: the parser does not parse dates from configuration files; time.Time
+// values can only be stored programmatically via Set.
+//
+//	deadline := time.Now().Add(24 * time.Hour)
+//	xc.Set("deadline", deadline)
+//	t, ok := xc.GetTime("deadline")  // deadline, true
+func (c *XConfig) GetTime(key string) (time.Time, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	if val, ok := c.Parameters[key]; ok {
+		if t, ok := val.Value.(time.Time); ok {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// GetStringCollection returns the value of key as a []string slice. A single
+// string scalar is wrapped in a one-element slice so that callers can always
+// range over the result without a type switch. Returns (nil, false) when the
+// key does not exist or holds an incompatible type.
+//
+//	// Config file:
+//	//   tag=stable
+//	//   tag=canary
+//	tags, ok := xc.GetStringCollection("tag")
+//	// tags == []string{"stable", "canary"}, ok == true
+//
+//	// Single-value promotion:
+//	xc.Set("env", "production")
+//	envs, ok := xc.GetStringCollection("env")
+//	// envs == []string{"production"}, ok == true
 func (c *XConfig) GetStringCollection(key string) ([]string, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
+		switch v := val.Value.(type) {
 		case []string:
-			return val.Value.([]string), true
+			return v, true
 		case string:
-			return []string{val.Value.(string)}, true
+			return []string{v}, true
 		}
 	}
 	return nil, false
 }
 
-// GetBoolCollection will return the key entry data as a []bool, or nil
-// return false as second parameter if the entry does not exists (remember a value can be nil and exists)
+// GetBoolCollection returns the value of key as a []bool slice. A single bool
+// scalar is wrapped in a one-element slice. Returns (nil, false) when the key
+// does not exist or holds an incompatible type.
+//
+//	// Config file:
+//	//   flag=true
+//	//   flag=false
+//	//   flag=true
+//	flags, ok := xc.GetBoolCollection("flag")
+//	// flags == []bool{true, false, true}, ok == true
 func (c *XConfig) GetBoolCollection(key string) ([]bool, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
+		switch v := val.Value.(type) {
 		case []bool:
-			return val.Value.([]bool), true
+			return v, true
 		case bool:
-			return []bool{val.Value.(bool)}, true
+			return []bool{v}, true
 		}
 	}
 	return nil, false
 }
 
-// GetIntCollection will return the key entry data as a []int, or nil
-// return false as second parameter if the entry does not exists (remember a value can be nil and exists)
+// GetIntCollection returns the value of key as a []int slice. A single int
+// scalar is wrapped in a one-element slice. Returns (nil, false) when the key
+// does not exist or holds an incompatible type.
+//
+//	// Config file:
+//	//   port=8080
+//	//   port=8081
+//	//   port=8082
+//	ports, ok := xc.GetIntCollection("port")
+//	// ports == []int{8080, 8081, 8082}, ok == true
 func (c *XConfig) GetIntCollection(key string) ([]int, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
+		switch v := val.Value.(type) {
 		case []int:
-			return val.Value.([]int), true
+			return v, true
 		case int:
-			return []int{val.Value.(int)}, true
+			return []int{v}, true
 		}
 	}
 	return nil, false
 }
 
-// GetFloatCollection will return the key entry data as a []float64, or nil
-// return false as second parameter if the entry does not exists (remember a value can be nil and exists)
+// GetFloatCollection returns the value of key as a []float64 slice. A single
+// float64 scalar is wrapped in a one-element slice. Returns (nil, false) when
+// the key does not exist or holds an incompatible type.
+//
+//	// Config file:
+//	//   ratio=0.25
+//	//   ratio=0.50
+//	//   ratio=0.75
+//	ratios, ok := xc.GetFloatCollection("ratio")
+//	// ratios == []float64{0.25, 0.50, 0.75}, ok == true
 func (c *XConfig) GetFloatCollection(key string) ([]float64, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
+		switch v := val.Value.(type) {
 		case []float64:
-			return val.Value.([]float64), true
+			return v, true
 		case float64:
-			return []float64{val.Value.(float64)}, true
+			return []float64{v}, true
 		}
 	}
 	return nil, false
 }
 
-// GetTimeCollection will return the key entry data as a []Time, or nil
-// return false as second parameter if the entry does not exists (remember a value can be nil and exists)
+// GetTimeCollection returns the value of key as a []time.Time slice. A single
+// time.Time value is wrapped in a one-element slice. Returns (nil, false) when
+// the key does not exist or holds an incompatible type.
 func (c *XConfig) GetTimeCollection(key string) ([]time.Time, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
+		switch v := val.Value.(type) {
 		case []time.Time:
-			return val.Value.([]time.Time), true
+			return v, true
 		case time.Time:
-			return []time.Time{val.Value.(time.Time)}, true
+			return []time.Time{v}, true
 		}
 	}
 	return nil, false
 }
 
-// Del will delete then entry key it exists
-func (c *XConfig) Del(key string) {
-	delete(c.Parameters, key)
-	delete(c.Comments, key)
-	// deletes from Order and comments too
-	for idx, v := range c.Order {
-		if v == key {
-			c.Order = append(c.Order[:idx], c.Order[idx+1:]...)
-		}
-	}
-}
-
-// Clone will perform a full clone of the whole structure
+// Clone returns a fully independent deep copy of the XConfig as an
+// xcore.XDatasetDef. All nested sub-configurations and all array slices are
+// recursively cloned; modifying the clone does not affect the original, and
+// modifying the original does not affect the clone.
+//
+// The returned value can be type-asserted to *XConfig when a concrete type is
+// needed:
+//
+//	snapshot := original.Clone().(*xconfig.XConfig)
+//	snapshot.Set("env", "test")
+//	// original remains unchanged
 func (c *XConfig) Clone() xcore.XDatasetDef {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
 	cloned := New()
 	for id, val := range c.Parameters {
 		cloned.Parameters[id] = *(&val).Clone()
@@ -986,107 +1353,257 @@ func (c *XConfig) Clone() xcore.XDatasetDef {
 	return cloned
 }
 
-// GetConfig will return the key entry data as a XConfig, or nil
-// This is similar to the GetDataset function
+// GetConfig returns the nested sub-XConfig stored under key, or nil when the
+// key does not exist or its value is not a *XConfig.
+//
+//	// Config file:
+//	//   database.host=db.example.com
+//	//   database.port=5432
+//	//   database.tls=true
+//
+//	db := xc.GetConfig("database")
+//	if db != nil {
+//	    host, _ := db.GetString("host")  // "db.example.com"
+//	    port, _ := db.GetInt("port")     // 5432
+//	    tls,  _ := db.GetBool("tls")     // true
+//	}
 func (c *XConfig) GetConfig(key string) *XConfig {
-	// check if key contains "." (subset of config)
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	if val, ok := c.Parameters[key]; ok {
-		switch val.Value.(type) {
-		case *XConfig:
-			return val.Value.(*XConfig)
+		if xc, ok := val.Value.(*XConfig); ok {
+			return xc
 		}
 	}
 	return nil
 }
 
-// LoadFile will try to load the file and parse it into the XConfig structure
+// ── Load / Merge ──────────────────────────────────────────────────────────────
+
+// LoadFile reads the file at filename and populates the XConfig, replacing any
+// existing entry that shares a key with one from the file. Entries that exist
+// in the config but are absent from the file are left untouched.
+//
+// To add entries from the file without replacing existing ones, use MergeFile.
+//
+//	xc := xconfig.New()
+//	if err := xc.LoadFile("/etc/myapp/app.conf"); err != nil {
+//	    log.Fatal(err)
+//	}
+//	host, _ := xc.GetString("host")
+//	port, _ := xc.GetInt("port")
+//
+// LoadFile returns an error if filename contains a path-traversal sequence
+// (".."), if the file cannot be opened, or if any line cannot be parsed.
 func (c *XConfig) LoadFile(filename string) error {
+	if err := validatePath(filename); err != nil {
+		return err
+	}
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	return c.loadandparse(filename, false)
 }
 
-// MergeFile will try to load the file and parse it into the XConfig structure, merging the entries to the existing ones
+// MergeFile reads the file at filename and merges its entries into the XConfig.
+// When a key already exists, the new value is appended to form an array;
+// existing entries are not replaced. To replace existing entries instead, use
+// LoadFile.
+//
+//	xc := xconfig.New()
+//	xc.LoadFile("defaults.conf")
+//	xc.MergeFile("local.conf")   // extends or supplements defaults
+//
+//	// Per-entry operators still take effect inside a merge:
+//	// "host:=override.example.com" in local.conf will always replace host.
+//
+// MergeFile returns an error if filename contains a path-traversal sequence,
+// if the file cannot be opened, or if any line cannot be parsed.
 func (c *XConfig) MergeFile(filename string) error {
+	if err := validatePath(filename); err != nil {
+		return err
+	}
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	return c.loadandparse(filename, true)
 }
 
-// LoadString will parse the string into the XConfig structure
+// LoadString parses the configuration text in data and replaces any existing
+// entries that share a key with entries from data. The format is identical to
+// a configuration file. Use MergeString to add entries without replacing
+// existing ones.
+//
+//	xc := xconfig.New()
+//	xc.LoadString("host=localhost\nport=5432\ndebug=false\n")
+//	host, _ := xc.GetString("host")   // "localhost"
+//	port, _ := xc.GetInt("port")      // 5432
+//	debug, _ := xc.GetBool("debug")   // false
 func (c *XConfig) LoadString(data string) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	return c.parsestring(data, false)
 }
 
-// MergeString will parse the string into the XConfig structure, merging the entries to the existing ones
+// MergeString parses the configuration text in data and merges its entries
+// into the XConfig. Existing entries are extended rather than replaced.
+//
+//	xc := xconfig.New()
+//	xc.LoadString("tag=stable\n")
+//	xc.MergeString("tag=latest\n")
+//	tags, _ := xc.GetStringCollection("tag")
+//	// tags == []string{"stable", "latest"}
 func (c *XConfig) MergeString(data string) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	return c.parsestring(data, true)
 }
 
-// LoadXConfig will load the new XConfig into the existing one
+// LoadXConfig copies all entries from src into c, replacing existing entries.
+// src is deep-cloned before insertion, so subsequent modifications to either
+// object do not affect the other. Use MergeXConfig to add entries without
+// replacing existing ones.
+//
+// LoadXConfig is a no-op when src is nil.
+//
+//	base := xconfig.New()
+//	base.LoadFile("base.conf")
+//
+//	active := xconfig.New()
+//	active.LoadXConfig(base)         // independent copy of base
+//	active.Set("env", "production")  // does not affect base
 func (c *XConfig) LoadXConfig(data *XConfig) error {
+	if data == nil {
+		return nil
+	}
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	return c.parsemap(data, false)
 }
 
-// MergeXConfig will merge the new XConfig to the existing one
+// MergeXConfig merges all entries from src into c. Existing entries are
+// extended rather than replaced; src is not modified.
+//
+// MergeXConfig is a no-op when src is nil.
+//
+//	defaults := xconfig.New()
+//	defaults.LoadFile("defaults.conf")
+//
+//	xc := xconfig.New()
+//	xc.LoadFile("app.conf")
+//	xc.MergeXConfig(defaults)   // fills in any keys absent from app.conf
 func (c *XConfig) MergeXConfig(data *XConfig) error {
+	if data == nil {
+		return nil
+	}
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	return c.parsemap(data, true)
 }
 
+// ── Serialisation ─────────────────────────────────────────────────────────────
+
+// buildLevel serialises the XConfig at the given key prefix, recursing into
+// nested sub-configurations. String values that would be misinterpreted by the
+// parser on reload (boolean keywords, numeric literals, strings starting with
+// '"') are written with a leading '"' character to preserve their type.
+// Empty sentinel keys in Order are skipped to prevent index-out-of-range panics.
 func (c *XConfig) buildLevel(prefix string) string {
 	sdata := []string{}
 	for _, val := range c.Order {
+		if len(val) == 0 {
+			continue // skip empty sentinel keys
+		}
 		if val[0] == '#' {
 			sdata = append(sdata, c.Comments[val])
 		} else {
-			switch c.Parameters[val].paramtype {
-			case 11:
-				a := c.Parameters[val].Value.([]string)
-				for _, v := range a {
-					sdata = append(sdata, prefix+val+"="+v)
+			param := c.Parameters[val]
+			switch param.paramtype {
+			case 1: // string — protect ambiguous values with a leading '"'
+				strval := param.Value.(string)
+				if needsQuotePrefix(strval) {
+					sdata = append(sdata, prefix+val+"=\""+strval)
+				} else {
+					sdata = append(sdata, prefix+val+"="+strval)
 				}
-			case 12:
-				a := c.Parameters[val].Value.([]int)
-				for _, v := range a {
+			case 11: // []string — protect each element individually
+				for _, v := range param.Value.([]string) {
+					if needsQuotePrefix(v) {
+						sdata = append(sdata, prefix+val+"=\""+v)
+					} else {
+						sdata = append(sdata, prefix+val+"="+v)
+					}
+				}
+			case 12: // []int
+				for _, v := range param.Value.([]int) {
 					sdata = append(sdata, prefix+val+"="+strconv.Itoa(v))
 				}
-			case 13:
-				a := c.Parameters[val].Value.([]float64)
-				for _, v := range a {
+			case 13: // []float64
+				for _, v := range param.Value.([]float64) {
 					sdata = append(sdata, prefix+val+"="+fmt.Sprint(v))
 				}
-			case 14:
-				a := c.Parameters[val].Value.([]bool)
-				for _, v := range a {
+			case 14: // []bool
+				for _, v := range param.Value.([]bool) {
 					sdata = append(sdata, prefix+val+"="+fmt.Sprint(v))
 				}
-			case 21:
-				a := c.Parameters[val].Value.(*XConfig)
-				sdata = append(sdata, a.buildLevel(prefix+val+"."))
+			case 21: // nested sub-XConfig — recurse with extended prefix
+				sdata = append(sdata, param.Value.(*XConfig).buildLevel(prefix+val+"."))
 			default:
-				sdata = append(sdata, prefix+val+"="+fmt.Sprint(c.Parameters[val].Value))
+				sdata = append(sdata, prefix+val+"="+fmt.Sprint(param.Value))
 			}
 		}
 	}
 	return strings.Join(sdata, "\n")
 }
 
+// Marshal returns the complete serialised text of the XConfig in the .conf
+// format. The output preserves comments, blank lines, and the original
+// insertion order. It can be written to a file and reloaded with LoadFile or
+// LoadString without any loss of data or type information.
+//
+//	xc := xconfig.New()
+//	xc.Set("host", "localhost")
+//	xc.Set("port", 5432)
+//	fmt.Print(xc.Marshal())
+//	// Output:
+//	// host=localhost
+//	// port=5432
+//	//
+//
+// String values that would be misinterpreted by the parser are automatically
+// protected with the '"' prefix, so a round-trip is always lossless:
+//
+//	xc.Set("label", "true")      // string, not bool
+//	text := xc.Marshal()         // produces: label="true
+//	xc2 := xconfig.New()
+//	xc2.LoadString(text)
+//	v, _ := xc2.GetString("label")  // "true"
 func (c *XConfig) Marshal() string {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	return c.buildLevel("") + "\n"
 }
 
+// SaveFile serialises the XConfig and writes it to filename.
+//
+// The file is written with mode 0644. Comments, blank lines, and the original
+// insertion order are preserved. String values that would be misinterpreted by
+// the parser on reload are automatically protected with the '"' prefix, making
+// the save-then-load cycle lossless.
+//
+//	xc := xconfig.New()
+//	xc.LoadFile("app.conf")
+//	xc.Set("version", "1.2.3")
+//	if err := xc.SaveFile("app.conf"); err != nil {
+//	    log.Fatal(err)
+//	}
+//
+// SaveFile returns an error if filename contains a path-traversal sequence or
+// if the file cannot be written.
 func (c *XConfig) SaveFile(filename string) error {
-	data := c.Marshal()
-	return ioutil.WriteFile(filename, []byte(data), 0x644)
-}
-
-func analyzeKey(key string) (interface{}, bool) {
-	mustmerge := false
-	if key[len(key)-1] == '+' {
-		mustmerge = true
-		key = key[0 : len(key)-1]
+	if err := validatePath(filename); err != nil {
+		return err
 	}
-	if key[len(key)-1] == ':' {
-		key = key[0 : len(key)-1]
-	}
-
-	match, _ := regexp.MatchString("[a-zA-Z0-9_-]+", key)
-	return match, mustmerge
-
+	c.mutex.RLock()
+	data := c.buildLevel("") + "\n"
+	c.mutex.RUnlock()
+	return os.WriteFile(filename, []byte(data), 0644)
 }
