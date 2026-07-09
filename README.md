@@ -1,6 +1,4 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/webability-go/xconfig)](https://goreportcard.com/report/github.com/webability-go/xconfig)
 [![GoDoc](https://godoc.org/github.com/webability-go/xconfig?status.png)](https://godoc.org/github.com/webability-go/xconfig)
-[![GolangCI](https://golangci.com/badges/github.com/webability-go/xconfig.svg)](https://golangci.com)
 
 XConfig for GO v1
 =============================
@@ -26,6 +24,11 @@ TO DO:
 
 Version Changes Control
 =======================
+
+v0.5.1 - 2026-07-08
+-----------------------
+- Updgrade of libraries in go.mod/go.sum to avoid error into golang.org/x/text v < 0-3-8  and others
+
 
 v0.5.0 - 2026-05-27
 -----------------------
