@@ -1,5 +1,3 @@
-@UTF-8
-
 [![Go Report Card](https://goreportcard.com/badge/github.com/webability-go/xconfig)](https://goreportcard.com/report/github.com/webability-go/xconfig)
 [![GoDoc](https://godoc.org/github.com/webability-go/xconfig?status.png)](https://godoc.org/github.com/webability-go/xconfig)
 [![GolangCI](https://golangci.com/badges/github.com/webability-go/xconfig.svg)](https://golangci.com)
@@ -12,7 +10,7 @@ Package xconfig loads a configuration file similar to a .ini file, but with some
 - The xconfig is compatible with XDataset to inject and use in templates, database records, etc.
 - You can load more than one file in merge mode or replacing mode in the same config object.
 - You can set and get parameters at any time.
-- You can load the config object based on a file, but also on a string and another object; this way you can serialize, unserialize, transfer by any strem, save or load on database the object, etc.
+- You can load the config object based on a file, but also on a string and another object; this way you can serialize, unserialize, transfer by any stream, save or load on database the object, etc.
 - You can also save back the config string with all its comments.
 
 Manuals are available on godoc.org [![GoDoc](https://godoc.org/github.com/webability-go/xconfig?status.png)](https://godoc.org/github.com/webability-go/xconfig)
@@ -20,16 +18,32 @@ Manuals are available on godoc.org [![GoDoc](https://godoc.org/github.com/webabi
 
 TO DO:
 ======
-- Make it thread safe ? (so maybe with a flag to activate it ?)
 - Add Time ? Other types of int32, int64, float32, runes etc ?
 - Merge vs load to load more than 1 file (pending)
-- implement + and :
 - Add a flag when it's a multiple load to warn a "save"
 - Add error control con Get* for type conversions (if the type is different as expected)
 - Log errors into official log
 
 Version Changes Control
 =======================
+
+v0.5.0 - 2026-05-27
+-----------------------
+- Big security and corrections update
+- Documentation enhanced directly into the code for pkg.go.dev
+- SaveFile now user 0644 correct unix mask
+- ioutil deprecated, now uses io and os
+- Verify safe paths with reading/writing files
+- The code is now thread-safe and racing safe
+- Operators := and += are finally implemented as they must work
+- Del operation is now safe and does not break anymore the configuration variables
+- helper functions added, add, parsemap enhanced because of some errors
+- Clone is now really cloning (deep clone of sub configs and arrays)
+- Set now parse keys with dots, like Get
+- buildLevel preserve the " for strings that are not obvious strings
+- String and buildleve does not panic anymore in case of empty lines and empty keys
+- Remove AnalyzeKey that is never used
+- Remove multithread property that is never used
 
 v0.4.3 - 2021-11-16
 -----------------------
